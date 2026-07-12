@@ -33,7 +33,7 @@ function linkClass(isActive: boolean, compact = false) {
   }`;
 }
 
-export function Layout() {
+export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
