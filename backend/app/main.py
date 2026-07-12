@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.services.owner_service import ensure_owner_user
 
 
 def create_app() -> FastAPI:
@@ -22,6 +23,11 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+    @app.on_event("startup")
+    def _ensure_singleton_owner() -> None:
+        if not settings.AUTH_ENABLED:
+            ensure_owner_user()
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:

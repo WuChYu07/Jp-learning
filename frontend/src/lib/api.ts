@@ -34,6 +34,7 @@ export type Vocabulary = {
   reading?: string;
   jlpt_level: string;
   definitions: VocabDefinition[];
+  review_score?: number | null;
 };
 
 /** Lightweight list row from GET /vocab */
@@ -43,6 +44,26 @@ export type VocabularySummary = {
   reading?: string;
   jlpt_level: string;
   meaning_zh?: string | null;
+  review_score?: number | null;
+};
+
+export type ReviewScoreResult = {
+  vocabulary_id: string;
+  review_score: number;
+  review_points: number;
+  score_delta: number;
+  points_delta: number;
+  viewed_bonus_applied: boolean;
+};
+
+export type ExamAttemptResult = {
+  id: string;
+  subject: string;
+  mode: string;
+  correct_count: number;
+  total_count: number;
+  score_percent: number;
+  completed_at: string;
 };
 
 export type VocabularyWriteInput = {
@@ -242,6 +263,12 @@ export type DashboardStats = {
   vocab_due_count: number;
   streak_days: number;
   daily_goal: number;
+  review_points: number;
+  review_score_avg: number;
+  exam_vocab_avg: number | null;
+  exam_grammar_avg: number | null;
+  exam_vocab_count: number;
+  exam_grammar_count: number;
 };
 
 // ── Knowledge graph ──
@@ -376,10 +403,23 @@ export const api = {
     request<{
       next_review_date: string;
       persisted?: boolean;
+      review_score?: number;
+      review_points?: number;
+      score_delta?: number;
+      points_delta?: number;
     }>("/api/v1/vocab/review", {
       method: "POST",
       body: JSON.stringify({ vocabulary_id, rating }),
     }),
+  randomVocab: (params?: { exclude_id?: string; jlpt?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.exclude_id) q.set("exclude_id", params.exclude_id);
+    if (params?.jlpt) q.set("jlpt", params.jlpt);
+    const qs = q.toString();
+    return request<Vocabulary>(`/api/v1/vocab/random${qs ? `?${qs}` : ""}`);
+  },
+  recordVocabView: (id: string) =>
+    request<ReviewScoreResult>(`/api/v1/vocab/${id}/view`, { method: "POST" }),
   listGrammar: (params?: { jlpt?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.jlpt) q.set("jlpt", params.jlpt);
@@ -424,6 +464,17 @@ export const api = {
     request<TranslationGradeResult>("/api/v1/quiz/translation/grade", {
       method: "POST",
       body: JSON.stringify({ source_zh, user_answer, hint_word }),
+    }),
+  submitQuizResult: (payload: {
+    subject: "vocab" | "grammar";
+    mode: string;
+    correct_count: number;
+    total_count: number;
+    detail?: Record<string, unknown>;
+  }) =>
+    request<ExamAttemptResult>("/api/v1/quiz/results", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   // ── Upload ──

@@ -33,6 +33,26 @@ export default function DashboardPage() {
             accent="text-[var(--color-primary)]"
           />
           <StatCard
+            label="複習總分"
+            value={stats.review_points}
+            accent="text-[var(--color-primary)]"
+          />
+          <StatCard
+            label="平均熟練度"
+            value={Math.round(stats.review_score_avg)}
+            accent="text-emerald-600"
+          />
+          <StatCard
+            label="連續天數"
+            value={stats.streak_days}
+            accent="text-emerald-600"
+          />
+        </section>
+      )}
+
+      {stats && (
+        <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <StatCard
             label="單字總數"
             value={stats.vocab_total}
             accent="text-[var(--color-primary-dark)]"
@@ -43,9 +63,28 @@ export default function DashboardPage() {
             accent="text-[var(--color-primary-dark)]"
           />
           <StatCard
-            label="連續天數"
-            value={stats.streak_days}
-            accent="text-emerald-600"
+            label="單字考試均分"
+            value={
+              stats.exam_vocab_avg != null
+                ? Math.round(stats.exam_vocab_avg)
+                : "—"
+            }
+            accent="text-sky-700"
+            suffix={stats.exam_vocab_count ? `% · ${stats.exam_vocab_count} 次` : undefined}
+          />
+          <StatCard
+            label="文法考試均分"
+            value={
+              stats.exam_grammar_avg != null
+                ? Math.round(stats.exam_grammar_avg)
+                : "—"
+            }
+            accent="text-violet-700"
+            suffix={
+              stats.exam_grammar_count
+                ? `% · ${stats.exam_grammar_count} 次`
+                : "尚無紀錄"
+            }
           />
         </section>
       )}
@@ -130,15 +169,18 @@ function StatCard({
   label,
   value,
   accent,
+  suffix,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   accent: string;
+  suffix?: string;
 }) {
   return (
     <div className="rounded-xl bg-white p-4 ring-1 ring-orange-100">
       <p className="text-sm text-stone-500">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${accent}`}>{value}</p>
+      {suffix && <p className="mt-0.5 text-xs text-stone-400">{suffix}</p>}
     </div>
   );
 }

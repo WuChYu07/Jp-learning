@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
 import VocabRelationHints from "../components/VocabRelationHints";
 import { api, Vocabulary, VocabularySummary, VocabularyWriteInput } from "../lib/api";
@@ -33,7 +34,9 @@ export default function VocabPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [nextLoading, setNextLoading] = useState(false);
   const detailReqId = useRef(0);
+  const viewedIds = useRef<Set<string>>(new Set());
 
   const loadList = async (offset = 0, append = false) => {
     if (append) setLoadingMore(true);
@@ -72,7 +75,7 @@ export default function VocabPage() {
     if (navId) setSelectedId(navId);
   }, [location.state]);
 
-  // Fetch full detail when selection changes.
+  // Fetch full detail when selection changes; record daily view bonus once per id session.
   useEffect(() => {
     if (!selectedId) {
       setSelected(null);
@@ -83,9 +86,23 @@ export default function VocabPage() {
     setError("");
     api
       .getVocab(selectedId)
-      .then((vocab) => {
+      .then(async (vocab) => {
         if (req !== detailReqId.current) return;
         setSelected(vocab);
+        if (!viewedIds.current.has(selectedId)) {
+          viewedIds.current.add(selectedId);
+          try {
+            const score = await api.recordVocabView(selectedId);
+            if (req !== detailReqId.current) return;
+            setSelected((prev) =>
+              prev && prev.id === selectedId
+                ? { ...prev, review_score: score.review_score }
+                : prev,
+            );
+          } catch {
+            // Viewing still works if score write fails (e.g. migration not applied).
+          }
+        }
       })
       .catch((err: Error) => {
         if (req !== detailReqId.current) return;
@@ -96,6 +113,25 @@ export default function VocabPage() {
         if (req === detailReqId.current) setDetailLoading(false);
       });
   }, [selectedId]);
+
+  async function goNextRandom() {
+    if (nextLoading) return;
+    setNextLoading(true);
+    setError("");
+    try {
+      const next = await api.randomVocab({
+        exclude_id: selectedId || undefined,
+        jlpt: jlpt || undefined,
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setSelectedId(next.id);
+      setSelected(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "無法載入下一個單字");
+    } finally {
+      setNextLoading(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -224,26 +260,46 @@ export default function VocabPage() {
             {detailLoading && !selected ? (
               <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
             ) : selected ? (
-              <VocabDetail
-                vocab={selected}
-                onSaved={(updated) => {
-                  setSelected(updated);
-                  setItems((prev) =>
-                    prev.map((item) =>
-                      item.id === updated.id
-                        ? {
-                            ...item,
-                            word: updated.word,
-                            reading: updated.reading,
-                            jlpt_level: updated.jlpt_level,
-                            meaning_zh: updated.definitions[0]?.meaning_zh ?? item.meaning_zh,
-                          }
-                        : item,
-                    ),
-                  );
-                }}
-                onError={setError}
-              />
+              <SwipeNavigate onSwipeRight={() => void goNextRandom()} disabled={nextLoading}>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-stone-500">
+                      熟練度{" "}
+                      <span className="font-semibold text-[var(--color-primary)]">
+                        {Math.round(selected.review_score ?? 0)}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      disabled={nextLoading}
+                      onClick={() => void goNextRandom()}
+                      className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {nextLoading ? "載入中…" : "下一個（低分優先）→"}
+                    </button>
+                  </div>
+                  <VocabDetail
+                    vocab={selected}
+                    onSaved={(updated) => {
+                      setSelected(updated);
+                      setItems((prev) =>
+                        prev.map((item) =>
+                          item.id === updated.id
+                            ? {
+                                ...item,
+                                word: updated.word,
+                                reading: updated.reading,
+                                jlpt_level: updated.jlpt_level,
+                                meaning_zh: updated.definitions[0]?.meaning_zh ?? item.meaning_zh,
+                              }
+                            : item,
+                        ),
+                      );
+                    }}
+                    onError={setError}
+                  />
+                </div>
+              </SwipeNavigate>
             ) : (
               <p className="py-12 text-center text-sm text-stone-400">選擇左側單字查看詳情</p>
             )}
@@ -311,6 +367,11 @@ function VocabDetail({
             <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
               {vocab.jlpt_level}
             </span>
+            {vocab.review_score != null && (
+              <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
+                熟練度 {Math.round(vocab.review_score)}
+              </span>
+            )}
             <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-stone-400">
               單字
             </p>

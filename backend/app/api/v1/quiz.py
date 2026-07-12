@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
+from app.api.deps import get_effective_user_id
 from app.core.config import settings
 from app.core.http_client import create_sync_client
+from app.models.schemas.vocab import ExamAttemptCreate, ExamAttemptOut
 from app.services.quiz_service import quiz_service
 
 router = APIRouter()
 
-
-# ── Response models ──────────────────────────────────────────────────────────
 
 class ChoiceOptionOut(BaseModel):
     id: str
@@ -65,13 +65,12 @@ class TranslationGradeResponse(BaseModel):
     grammar_notes: str | None = None
 
 
-# ── 4-Choice quiz ────────────────────────────────────────────────────────────
-
 @router.get("/vocab", response_model=QuizBatchOut)
 def get_4choice_quiz(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
     count: int = Query(default=10, ge=1, le=20),
 ) -> QuizBatchOut:
-    batch = quiz_service.generate_4choice(count)
+    batch = quiz_service.generate_4choice(count, user_id=user_id)
     return QuizBatchOut(
         questions=[
             FourChoiceQuestionOut(
@@ -89,13 +88,12 @@ def get_4choice_quiz(
     )
 
 
-# ── Translation prompts ─────────────────────────────────────────────────────
-
 @router.get("/translation/prompts", response_model=TranslationBatchOut)
 def get_translation_prompts(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
     count: int = Query(default=5, ge=1, le=10),
 ) -> TranslationBatchOut:
-    batch = quiz_service.generate_translation_prompts(count)
+    batch = quiz_service.generate_translation_prompts(count, user_id=user_id)
     return TranslationBatchOut(
         prompts=[
             TranslationPromptOut(
@@ -111,7 +109,13 @@ def get_translation_prompts(
     )
 
 
-# ── Translation grading via Gemini ───────────────────────────────────────────
+@router.post("/results", response_model=ExamAttemptOut)
+def submit_exam_result(
+    body: ExamAttemptCreate,
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+) -> ExamAttemptOut:
+    return quiz_service.save_exam_attempt(user_id, body)
+
 
 _GRADE_PROMPT = """You are a strict but encouraging Japanese language teacher grading a student's translation.
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import get_effective_user_id
 from app.models.schemas.common import JlptLevel
 from app.models.schemas.links import LinkEntityType, RelationGraphOut
-from app.models.schemas.vocab import VocabularyOut, VocabularySummary, VocabularyWriteInput
+from app.models.schemas.vocab import ReviewScoreOut, VocabularyOut, VocabularySummary, VocabularyWriteInput
 from app.services.link_service import link_service
 from app.services.vocab_enrichment_service import vocab_enrichment_service
 from app.services.vocab_service import vocab_service
@@ -61,6 +61,23 @@ def submit_review(
     return vocab_service.submit_review(user_id, body.vocabulary_id, body.rating)
 
 
+@router.get("/random", response_model=VocabularyOut)
+def random_vocabulary(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+    exclude_id: UUID | None = None,
+    jlpt: JlptLevel | None = None,
+) -> VocabularyOut:
+    return vocab_service.random_vocab(user_id, exclude_id=exclude_id, jlpt=jlpt)
+
+
+@router.post("/{vocabulary_id}/view", response_model=ReviewScoreOut)
+def record_vocabulary_view(
+    vocabulary_id: UUID,
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+) -> ReviewScoreOut:
+    return vocab_service.record_view(user_id, vocabulary_id)
+
+
 @router.get("/{vocabulary_id}/relations", response_model=RelationGraphOut)
 def get_vocab_relations(
     vocabulary_id: UUID,
@@ -92,5 +109,8 @@ def update_vocabulary(vocabulary_id: UUID, payload: VocabularyWriteInput) -> Voc
 
 
 @router.get("/{vocabulary_id}", response_model=VocabularyOut)
-def get_vocabulary(vocabulary_id: UUID) -> VocabularyOut:
-    return vocab_service.get_vocab(vocabulary_id)
+def get_vocabulary(
+    vocabulary_id: UUID,
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+) -> VocabularyOut:
+    return vocab_service.get_vocab(vocabulary_id, user_id=user_id)

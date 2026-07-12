@@ -59,6 +59,7 @@ class VocabularyOut(BaseModel):
     reading: str | None = None
     jlpt_level: JlptLevel
     definitions: list[VocabularyDefinitionOut]
+    review_score: float | None = None
 
 
 class VocabularySummary(BaseModel):
@@ -69,6 +70,42 @@ class VocabularySummary(BaseModel):
     reading: str | None = None
     jlpt_level: JlptLevel
     meaning_zh: str | None = None
+    review_score: float | None = None
+
+
+class ReviewScoreOut(BaseModel):
+    vocabulary_id: UUID
+    review_score: float
+    review_points: int
+    score_delta: float = 0
+    points_delta: int = 0
+    viewed_bonus_applied: bool = False
+
+
+class ExamAttemptCreate(BaseModel):
+    subject: str = Field(description="vocab | grammar")
+    mode: str = Field(description="4choice | translation | ...")
+    correct_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+    detail: dict | None = None
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"vocab", "grammar"}:
+            raise ValueError("subject must be vocab or grammar")
+        return normalized
+
+
+class ExamAttemptOut(BaseModel):
+    id: UUID
+    subject: str
+    mode: str
+    correct_count: int
+    total_count: int
+    score_percent: float
+    completed_at: str
 
 
 class VocabExampleEnrichment(BaseModel):

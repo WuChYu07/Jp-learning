@@ -74,6 +74,7 @@ function FourChoiceQuiz() {
   const [finished, setFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -83,6 +84,7 @@ function FourChoiceQuiz() {
     setFinished(false);
     setSelected(null);
     setRevealed(false);
+    setSaved(false);
     api
       .quiz4Choice(10)
       .then((res) => setQuestions(res.questions))
@@ -93,6 +95,21 @@ function FourChoiceQuiz() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!finished || saved || questions.length === 0) return;
+    setSaved(true);
+    void api
+      .submitQuizResult({
+        subject: "vocab",
+        mode: "4choice",
+        correct_count: score,
+        total_count: questions.length,
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+  }, [finished, saved, score, questions.length]);
 
   if (loading) return <LoadingCard />;
   if (error) return <ErrorCard message={error} />;
@@ -255,6 +272,7 @@ function TranslationQuiz() {
   const [error, setError] = useState("");
   const [scores, setScores] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -264,6 +282,7 @@ function TranslationQuiz() {
     setResult(null);
     setScores([]);
     setFinished(false);
+    setSaved(false);
     api
       .translationPrompts(5)
       .then((res) => setPrompts(res.prompts))
@@ -274,6 +293,23 @@ function TranslationQuiz() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!finished || saved || scores.length === 0) return;
+    setSaved(true);
+    const correct = scores.filter((s) => s >= 3).length;
+    void api
+      .submitQuizResult({
+        subject: "vocab",
+        mode: "translation",
+        correct_count: correct,
+        total_count: scores.length,
+        detail: { scores },
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+  }, [finished, saved, scores]);
 
   if (loading) return <LoadingCard />;
   if (error) return <ErrorCard message={error} />;

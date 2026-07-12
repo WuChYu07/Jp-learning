@@ -26,6 +26,7 @@ export default function VocabReviewPage() {
   const [totalVocab, setTotalVocab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SessionStats>({ reviewed: 0, known: 0, unknown: 0 });
+  const [lastDelta, setLastDelta] = useState<string | null>(null);
 
   const currentOffset = useRef(0);
 
@@ -59,7 +60,16 @@ export default function VocabReviewPage() {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
-      await api.submitReview(current.id, rating);
+      const result = await api.submitReview(current.id, rating);
+      const sd = result.score_delta ?? 0;
+      const pd = result.points_delta ?? 0;
+      if (sd !== 0 || pd !== 0) {
+        const scorePart = sd > 0 ? `熟練度 +${sd}` : sd < 0 ? `熟練度 ${sd}` : "";
+        const pointPart = pd > 0 ? `總分 +${pd}` : pd < 0 ? `總分 ${pd}` : "";
+        setLastDelta([scorePart, pointPart].filter(Boolean).join(" · "));
+      } else {
+        setLastDelta(null);
+      }
 
       const isKnown = rating === "good" || rating === "easy";
       setStats((s) => ({
@@ -199,6 +209,9 @@ export default function VocabReviewPage() {
         </div>
       </div>
       {error && <p className="text-red-600">{error}</p>}
+      {lastDelta && (
+        <p className="text-center text-sm font-medium text-emerald-700">{lastDelta}</p>
+      )}
 
       <SwipeFlashcard
         key={current!.id}

@@ -12,12 +12,14 @@ from supabase import Client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.common import JlptLevel
 from app.models.schemas.vocab import (
+    ReviewScoreOut,
     VocabularyDefinitionOut,
     VocabularyOut,
     VocabularySummary,
     VocabularyWriteInput,
 )
 from app.services.hash_service import vocab_entry_hash
+from app.services.score_service import score_service
 from app.services.srs_service import apply_review, default_srs_state, rating_to_quality
 from app.services.text_sanitize import clean_text
 
@@ -76,7 +78,9 @@ class VocabService:
         ]
         return items, result.count or len(items)
 
-    def get_vocab(self, vocabulary_id: UUID) -> VocabularyOut:
+    def get_vocab(
+        self, vocabulary_id: UUID, user_id: str | None = None
+    ) -> VocabularyOut:
         exists = (
             self.db.table("vocabularies")
             .select("id")
@@ -86,7 +90,61 @@ class VocabService:
         )
         if exists is None or not exists.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vocabulary not found")
-        return self._load_vocab_out(vocabulary_id)
+        return self._load_vocab_out(vocabulary_id, user_id=user_id)
+
+    def record_view(self, user_id: str | None, vocabulary_id: UUID) -> ReviewScoreOut:
+        self.get_vocab(vocabulary_id)
+        if user_id is None:
+            return ReviewScoreOut(
+                vocabulary_id=vocabulary_id,
+                review_score=0,
+                review_points=0,
+                score_delta=0,
+                points_delta=0,
+                viewed_bonus_applied=False,
+            )
+        snap = score_service.record_view(user_id, vocabulary_id)
+        return ReviewScoreOut(
+            vocabulary_id=vocabulary_id,
+            review_score=snap.review_score,
+            review_points=snap.review_points,
+            score_delta=snap.score_delta,
+            points_delta=snap.points_delta,
+            viewed_bonus_applied=snap.viewed_bonus_applied,
+        )
+
+    def random_vocab(
+        self,
+        user_id: str | None,
+        *,
+        exclude_id: UUID | None = None,
+        jlpt: JlptLevel | None = None,
+    ) -> VocabularyOut:
+        query = self.db.table("vocabularies").select("id")
+        if jlpt:
+            query = query.eq("jlpt_level", jlpt.value)
+        rows = (query.execute()).data or []
+        ids = [r["id"] for r in rows]
+        if not ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No vocabulary available",
+            )
+
+        exclude = {str(exclude_id)} if exclude_id else set()
+        score_map = score_service.score_map_for_user(user_id) if user_id else {}
+        picked = score_service.weighted_sample_ids(
+            ids, score_map, count=1, exclude_ids=exclude
+        )
+        if not picked and exclude:
+            # Only one word in pool — allow staying? Prefer any other, else same.
+            picked = score_service.weighted_sample_ids(ids, score_map, count=1)
+        if not picked:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No vocabulary available",
+            )
+        return self.get_vocab(UUID(picked[0]), user_id=user_id)
 
     def update_vocab(self, vocabulary_id: UUID, payload: VocabularyWriteInput) -> VocabularyOut:
         current = self.get_vocab(vocabulary_id)
@@ -242,7 +300,7 @@ class VocabService:
         combined = due_ids + new_ids
         total_available = len(combined)
         page = combined[offset : offset + limit]
-        items = [self._load_vocab_out(UUID(vid)) for vid in page]
+        items = [self._load_vocab_out(UUID(vid), user_id=user_id) for vid in page]
         next_offset = offset + len(page)
 
         return ReviewBatch(
@@ -266,11 +324,18 @@ class VocabService:
                 "next_review_date": update.next_review_date.isoformat(),
                 "interval_days": update.interval_days,
                 "persisted": False,
+                "review_score": 0,
+                "review_points": 0,
+                "score_delta": 0,
+                "points_delta": 0,
             }
 
         progress = (
             self.db.table("user_vocab_progress")
-            .select("id, easiness_factor, repetitions, interval_days")
+            .select(
+                "id, easiness_factor, repetitions, interval_days, "
+                "review_score, times_reviewed"
+            )
             .eq("user_id", user_id)
             .eq("vocabulary_id", str(vocabulary_id))
             .maybe_single()
@@ -290,6 +355,7 @@ class VocabService:
                     "last_reviewed_at": datetime.now(UTC).isoformat(),
                 }
             ).execute()
+            progress_row = None
         else:
             from app.services.srs_service import SrsState
 
@@ -308,6 +374,23 @@ class VocabService:
                     "last_reviewed_at": datetime.now(UTC).isoformat(),
                 }
             ).eq("id", progress.data["id"]).execute()
+            progress_row = progress.data
+
+        # Re-fetch for score apply (row now exists)
+        if progress_row is None:
+            refreshed = (
+                self.db.table("user_vocab_progress")
+                .select("id, review_score, times_reviewed")
+                .eq("user_id", user_id)
+                .eq("vocabulary_id", str(vocabulary_id))
+                .maybe_single()
+                .execute()
+            )
+            progress_row = refreshed.data if refreshed is not None else None
+
+        snap = score_service.apply_rating(
+            user_id, vocabulary_id, rating, progress_row=progress_row
+        )
 
         return {
             "vocabulary_id": str(vocabulary_id),
@@ -315,11 +398,17 @@ class VocabService:
             "next_review_date": update.next_review_date.isoformat(),
             "interval_days": update.interval_days,
             "persisted": True,
+            "review_score": snap.review_score,
+            "review_points": snap.review_points,
+            "score_delta": snap.score_delta,
+            "points_delta": snap.points_delta,
         }
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _load_vocab_out(self, vocabulary_id: UUID) -> VocabularyOut:
+    def _load_vocab_out(
+        self, vocabulary_id: UUID, user_id: str | None = None
+    ) -> VocabularyOut:
         vocab = (
             self.db.table("vocabularies")
             .select("id, word, reading, jlpt_level")
@@ -337,6 +426,9 @@ class VocabService:
             .order("sort_order")
             .execute()
         )
+        review_score = None
+        if user_id:
+            review_score = score_service.get_vocab_score(user_id, vocabulary_id)
         return VocabularyOut(
             id=UUID(vocab.data["id"]),
             word=vocab.data["word"],
@@ -354,6 +446,7 @@ class VocabService:
                 )
                 for row in definitions.data or []
             ],
+            review_score=review_score,
         )
 
 

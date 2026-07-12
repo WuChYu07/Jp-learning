@@ -5,16 +5,22 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
 from app.core.security import verify_access_token
+from app.services.owner_service import SINGLETON_OWNER_ID
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _single_user_id() -> str:
+    """Solo mode always has a stable owner id (no login / env setup)."""
+    return (settings.DEV_USER_ID or "").strip() or settings.SINGLETON_OWNER_ID or SINGLETON_OWNER_ID
 
 
 async def get_effective_user_id(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> str | None:
-    """Return user id from JWT, or None when auth is disabled (single-user mode)."""
+    """Return user id from JWT, or the singleton owner when auth is disabled."""
     if not settings.AUTH_ENABLED:
-        return settings.DEV_USER_ID or None
+        return _single_user_id()
 
     if credentials is None:
         raise HTTPException(
@@ -41,7 +47,7 @@ async def get_optional_user_id(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> str | None:
     if not settings.AUTH_ENABLED:
-        return settings.DEV_USER_ID or None
+        return _single_user_id()
     if credentials is None:
         return None
     try:

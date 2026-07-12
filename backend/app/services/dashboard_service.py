@@ -16,6 +16,12 @@ class DashboardStats(BaseModel):
     vocab_due_count: int
     streak_days: int
     daily_goal: int = 10
+    review_points: int = 0
+    review_score_avg: float = 0
+    exam_vocab_avg: float | None = None
+    exam_grammar_avg: float | None = None
+    exam_vocab_count: int = 0
+    exam_grammar_count: int = 0
 
 
 class DashboardService:
@@ -28,6 +34,13 @@ class DashboardService:
 
         vocab_due = 0
         streak = 0
+        review_points = 0
+        review_score_avg = 0.0
+        exam_vocab_avg: float | None = None
+        exam_grammar_avg: float | None = None
+        exam_vocab_count = 0
+        exam_grammar_count = 0
+
         if user_id:
             now_iso = datetime.now(UTC).isoformat()
             due = (
@@ -42,24 +55,33 @@ class DashboardService:
 
             progress = (
                 self.db.table("user_vocab_progress")
-                .select("vocabulary_id")
+                .select("vocabulary_id, review_score")
                 .eq("user_id", user_id)
                 .execute()
             )
-            seen = len(progress.data or [])
+            rows = progress.data or []
+            seen = len(rows)
             vocab_due += max(0, min(vocab_total - seen, 10))
+            if rows:
+                review_score_avg = round(
+                    sum(float(r.get("review_score") or 0) for r in rows) / len(rows),
+                    1,
+                )
 
             profile = (
                 self.db.table("users")
-                .select("streak_days")
+                .select("streak_days, review_points")
                 .eq("id", user_id)
                 .maybe_single()
                 .execute()
             )
             if profile is not None and profile.data:
                 streak = profile.data.get("streak_days") or 0
+                review_points = int(profile.data.get("review_points") or 0)
+
+            exam_vocab_avg, exam_vocab_count = self._exam_avg(user_id, "vocab")
+            exam_grammar_avg, exam_grammar_count = self._exam_avg(user_id, "grammar")
         else:
-            # Single-user mode: all vocab available for practice
             vocab_due = vocab_total
 
         return DashboardStats(
@@ -67,7 +89,28 @@ class DashboardService:
             grammar_total=grammar_total,
             vocab_due_count=vocab_due,
             streak_days=streak,
+            review_points=review_points,
+            review_score_avg=review_score_avg,
+            exam_vocab_avg=exam_vocab_avg,
+            exam_grammar_avg=exam_grammar_avg,
+            exam_vocab_count=exam_vocab_count,
+            exam_grammar_count=exam_grammar_count,
         )
+
+    def _exam_avg(self, user_id: str, subject: str) -> tuple[float | None, int]:
+        rows = (
+            self.db.table("exam_attempts")
+            .select("score_percent")
+            .eq("user_id", user_id)
+            .eq("subject", subject)
+            .order("completed_at", desc=True)
+            .limit(20)
+            .execute()
+        ).data or []
+        if not rows:
+            return None, 0
+        avg = round(sum(float(r.get("score_percent") or 0) for r in rows) / len(rows), 1)
+        return avg, len(rows)
 
 
 dashboard_service = DashboardService()

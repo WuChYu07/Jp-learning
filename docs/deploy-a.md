@@ -53,7 +53,7 @@
 | `AUTH_ENABLED` | `false`（單人） |
 | `SSL_VERIFY` | `true` |
 
-選填：`DEV_USER_ID`、`NOTION_TOKEN`、`NOTION_VOCAB_PAGE_ID`、`NOTION_GRAMMAR_PAGE_ID`
+選填：`NOTION_TOKEN`、`NOTION_VOCAB_PAGE_ID`、`NOTION_GRAMMAR_PAGE_ID`（單人模式不需 `DEV_USER_ID`）
 
 ### 前端（從 `frontend/.env`）
 

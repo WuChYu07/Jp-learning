@@ -1,4 +1,4 @@
-"""Quiz generation: 4-choice vocab questions + translation prompts."""
+"""Quiz generation: 4-choice vocab questions + translation prompts + exam persist."""
 
 from __future__ import annotations
 
@@ -6,9 +6,12 @@ import random
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
+from app.models.schemas.vocab import ExamAttemptCreate, ExamAttemptOut
+from app.services.score_service import score_service
 
 
 @dataclass
@@ -54,7 +57,9 @@ class QuizService:
     def __init__(self, db: Client | None = None) -> None:
         self.db = db or get_supabase_client()
 
-    def generate_4choice(self, count: int = 10) -> QuizBatch:
+    def generate_4choice(
+        self, count: int = 10, user_id: str | None = None
+    ) -> QuizBatch:
         all_vocab = (
             self.db.table("vocabularies")
             .select("id, word, reading")
@@ -78,7 +83,14 @@ class QuizService:
             return QuizBatch(questions=[], total_available=len(eligible))
 
         sample_size = min(count, len(eligible))
-        selected = random.sample(eligible, sample_size)
+        score_map = score_service.score_map_for_user(user_id) if user_id else {}
+        selected_ids = score_service.weighted_sample_ids(
+            [v["id"] for v in eligible],
+            score_map,
+            count=sample_size,
+        )
+        by_id = {v["id"]: v for v in eligible}
+        selected = [by_id[vid] for vid in selected_ids if vid in by_id]
 
         questions: list[FourChoiceQuestion] = []
         for i, vocab in enumerate(selected):
@@ -91,7 +103,9 @@ class QuizService:
 
         return QuizBatch(questions=questions, total_available=len(eligible))
 
-    def generate_translation_prompts(self, count: int = 5) -> TranslationBatch:
+    def generate_translation_prompts(
+        self, count: int = 5, user_id: str | None = None
+    ) -> TranslationBatch:
         all_defs = (
             self.db.table("vocabulary_definitions")
             .select("vocabulary_id, meaning_zh, meaning_en, example_sentences")
@@ -130,8 +144,22 @@ class QuizService:
             ).data or []
             vocab_map = {v["id"]: v for v in vocab_rows}
 
-        sample_size = min(count, len(candidates))
-        selected = random.sample(candidates, sample_size) if candidates else []
+        # Prefer low-score vocabularies, then pick one prompt per vocab
+        unique_vids = list({c["vocabulary_id"] for c in candidates})
+        score_map = score_service.score_map_for_user(user_id) if user_id else {}
+        sample_size = min(count, len(unique_vids))
+        picked_vids = score_service.weighted_sample_ids(
+            unique_vids, score_map, count=sample_size
+        )
+        by_vid: dict[str, list[dict]] = {}
+        for c in candidates:
+            by_vid.setdefault(c["vocabulary_id"], []).append(c)
+
+        selected: list[dict] = []
+        for vid in picked_vids:
+            opts = by_vid.get(vid) or []
+            if opts:
+                selected.append(random.choice(opts))
 
         prompts: list[TranslationPrompt] = []
         for c in selected:
@@ -145,6 +173,46 @@ class QuizService:
             ))
 
         return TranslationBatch(prompts=prompts, total_available=len(candidates))
+
+    def save_exam_attempt(
+        self, user_id: str | None, payload: ExamAttemptCreate
+    ) -> ExamAttemptOut:
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User required to save exam results",
+            )
+        from app.services.owner_service import ensure_owner_user
+
+        ensure_owner_user(self.db)
+        total = max(payload.total_count, 0)
+        correct = max(0, min(payload.correct_count, total))
+        percent = round((correct / total) * 100, 2) if total else 0.0
+        row = {
+            "user_id": user_id,
+            "subject": payload.subject,
+            "mode": payload.mode,
+            "correct_count": correct,
+            "total_count": total,
+            "score_percent": percent,
+            "detail": payload.detail or {},
+        }
+        result = self.db.table("exam_attempts").insert(row).execute()
+        data = (result.data or [None])[0]
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save exam attempt",
+            )
+        return ExamAttemptOut(
+            id=UUID(data["id"]),
+            subject=data["subject"],
+            mode=data["mode"],
+            correct_count=data["correct_count"],
+            total_count=data["total_count"],
+            score_percent=float(data["score_percent"]),
+            completed_at=str(data.get("completed_at") or ""),
+        )
 
     def _build_question(
         self,

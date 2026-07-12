@@ -172,7 +172,7 @@ jp-learning/
 | `GEMINI_MODEL` | — | 預設見 `.env.example` |
 | `CORS_ORIGINS` | ✅（雲端） | 逗號分隔前端 origin |
 | `AUTH_ENABLED` | — | `false`＝單人；`true`＝要 JWT |
-| `DEV_USER_ID` | — | 單人 SRS 用的 user UUID |
+| `DEV_USER_ID` | — | 可留空；單人模式自動用內建 owner id |
 | `NOTION_TOKEN` / `NOTION_*_PAGE_ID` | — | Notion 同步 |
 
 ### Frontend（`frontend/.env`）

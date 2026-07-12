@@ -53,8 +53,10 @@ class Settings(BaseSettings):
 
     # Auth — set false for single-user / local dev (no JWT required)
     AUTH_ENABLED: bool = False
-    # Optional: Supabase user UUID for SRS progress when AUTH_ENABLED=false
+    # Optional override; when empty and AUTH_ENABLED=false, uses SINGLETON_OWNER_ID
     DEV_USER_ID: str = ""
+    # Fixed solo-owner UUID (created by migration 012 / ensure_owner_user)
+    SINGLETON_OWNER_ID: str = "a0000000-0000-4000-8000-000000000001"
 
     # TLS — set false only for local dev if Windows SSL chain fails
     SSL_VERIFY: bool = True
