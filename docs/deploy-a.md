@@ -1,203 +1,173 @@
-# 從頭部署 Komorebi（方案 A）
+# 從頭部署 Komorebi（免費方案）
 
-目標：手機瀏覽器打開一個 `https://…` 網址就能用。
+目標：手機瀏覽器打開 `https://…` 就能用，**盡量 $0**。
 
-建議組合：**GitHub → Railway（後端）→ Vercel（前端）**
+建議組合：**GitHub → Render Free（後端）→ Vercel（前端）→ Supabase（已有）**
 
 ```text
-你（手機） → Vercel 前端 → Railway API → Supabase / Gemini
+你（手機） → Vercel 前端（免）
+              → Render Free API（免，但會休眠）
+              → Supabase / Gemini（你已有的免費額度）
 ```
 
-整份做完大約 30–60 分鐘（含申請帳號）。
+整份約 30–60 分鐘。
+
+### 免費要注意什麼
+
+| 項目 | 說明 |
+|------|------|
+| Render Free | 約 **15 分鐘沒人用會睡**；下次打開可能要等 **30–60 秒** 才醒來 |
+| 每月時數 | Free Web Service 有月用量上限（見 Render Billing）；個人學日文通常夠 |
+| 不要用 | Render 免費 Postgres（會過期）— **繼續用 Supabase** |
+| 不要用 Railway 當主方案 | 試用後幾乎要付錢；本文件以 Render 為主 |
 
 ---
 
 ## 開始前檢查
 
-| 項目 | 你這邊 |
-|------|--------|
-| GitHub repo | 已有：`WuChYu07/Jp-learning` |
-| 本機能跑前後端 | 建議先確認 |
-| Supabase | 已有專案與 Key |
-| Gemini Key | 已有 |
-| **程式碼已 push 到 GitHub** | ⚠ 若 `backend/`、`frontend/` 還在本機未推送，雲端讀不到，**一定要先做第 1 步** |
+| 項目 | 狀態 |
+|------|------|
+| GitHub：`WuChYu07/Jp-learning` | 需已含 `backend/`、`frontend/` |
+| Supabase、Gemini Key | 本機 `.env` 已有 |
+| **不要** push `.env` | 密鑰只貼到 Render／Vercel 後台 |
 
-**絕對不要**把 `backend/.env`、`frontend/.env` 推上 GitHub（裡面有密鑰）。
-
----
-
-## 第 1 步：把程式推上 GitHub
-
-在專案根目錄（PowerShell）：
-
-```powershell
-cd D:\Dev\jp-learning
-git status
-```
-
-若看到 `backend/`、`frontend/`、`docs/` 是未追蹤（`??`），需要先提交再推送。
-
-可請 Cursor 幫你 commit，或自己執行（**不要** `git add` 任何 `.env`）：
-
-```powershell
-git add README.md docs backend frontend
-git status
-# 確認沒有 .env、.cursor 被加進去
-git commit -m "Add app and Option A deploy scaffolding"
-git push -u origin main
-```
-
-到瀏覽器打開：  
-https://github.com/WuChYu07/Jp-learning  
-
-確認看得到資料夾：`backend/`、`frontend/`、`docs/deploy-a.md`。
+程式若還沒上 GitHub，先 `git push`（排除 `.env`）。  
+確認：https://github.com/WuChYu07/Jp-learning 看得到 `backend/`、`frontend/`。
 
 ---
 
-## 第 2 步：準備要貼的環境變數（先抄在記事本）
+## 第 1 步：準備環境變數（抄到記事本）
 
-### 後端用（從本機 `backend/.env` 複製）
+### 後端（從 `backend/.env`）
 
-| 變數名 | 值從哪來 |
-|--------|----------|
-| `APP_ENV` | 填 `production` |
-| `DEBUG` | 填 `false` |
-| `CORS_ORIGINS` | **先**填 `http://localhost:5173`（第 4 步再改） |
-| `SUPABASE_URL` | `backend/.env` |
-| `SUPABASE_ANON_KEY` | `backend/.env` |
-| `SUPABASE_SERVICE_ROLE_KEY` | `backend/.env`（只給後端） |
-| `GEMINI_API_KEY` | `backend/.env` |
+| 變數名 | 值 |
+|--------|-----|
+| `APP_ENV` | `production` |
+| `DEBUG` | `false` |
+| `CORS_ORIGINS` | 先填 `http://localhost:5173`（第 3 步再改成 Vercel 網址） |
+| `SUPABASE_URL` | 同本機 |
+| `SUPABASE_ANON_KEY` | 同本機 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 同本機（只給後端） |
+| `GEMINI_API_KEY` | 同本機 |
 | `GEMINI_MODEL` | 例如 `gemini-2.5-flash` |
-| `AUTH_ENABLED` | 單人可先 `false` |
+| `AUTH_ENABLED` | `false`（單人） |
 | `SSL_VERIFY` | `true` |
 
 選填：`DEV_USER_ID`、`NOTION_TOKEN`、`NOTION_VOCAB_PAGE_ID`、`NOTION_GRAMMAR_PAGE_ID`
 
-### 前端用（從本機 `frontend/.env` 複製）
+### 前端（從 `frontend/.env`）
 
-| 變數名 | 值從哪來 |
-|--------|----------|
-| `VITE_SUPABASE_URL` | `frontend/.env` |
-| `VITE_SUPABASE_ANON_KEY` | `frontend/.env`（publishable／anon，**不是** service role） |
-| `VITE_API_BASE` | **第 3 步做完才有**（Railway 網址，不要結尾 `/`） |
+| 變數名 | 值 |
+|--------|-----|
+| `VITE_SUPABASE_URL` | 同本機 |
+| `VITE_SUPABASE_ANON_KEY` | publishable／anon（**不是** service role） |
+| `VITE_API_BASE` | **第 2 步做完才有**（Render 網址，不要結尾 `/`） |
 
 ---
 
-## 第 3 步：部署後端（Railway）
+## 第 2 步：部署後端（Render Free）
 
-### 3.1 註冊並連 GitHub
+### 2.1 註冊
 
-1. 打開 https://railway.app → 用 **GitHub** 登入  
-2. 授權 Railway 讀取 `Jp-learning`（或整個帳號）
+1. 打開 https://render.com → 用 **GitHub** 登入  
+2. 授權讀取 `Jp-learning`
 
-### 3.2 建立專案
+### 2.2 建立 Web Service
 
-1. **New Project** → **Deploy from GitHub repo**  
-2. 選 `WuChYu07/Jp-learning`  
-3. 若問 Root Directory／哪個服務：選或稍後設定為 **`backend`**
+1. **New +** → **Web Service**  
+2. 連 `WuChYu07/Jp-learning`  
+3. 設定：
 
-### 3.3 確認用 Docker／正確目錄
+| 欄位 | 填什麼 |
+|------|--------|
+| Name | 例如 `komorebi-api` |
+| Region | 選離你近的（如 Singapore） |
+| Root Directory | **`backend`** |
+| Runtime | **Docker**（會用 repo 裡的 `backend/Dockerfile`） |
+| Instance Type | **Free** |
 
-在該 Service 的 **Settings**：
+若 Docker 建置失敗，可改 **Python**：
 
-- **Root Directory**：`backend`  
-- 有 `Dockerfile` 時 Railway 通常會自動用 Docker build  
+| 欄位 | 值 |
+|------|-----|
+| Runtime | Python 3 |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Root Directory | `backend` |
 
-若改成不用 Docker，Start Command 設：
+### 2.3 環境變數
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+**Environment** → 把第 1 步「後端」變數全部加上 → **Save**。
 
-### 3.4 貼環境變數
+### 2.4 部署與健康檢查
 
-**Variables** → 逐一新增第 2 步「後端用」那些（可 Raw Editor 一次貼多行 `KEY=value`）。
+1. 等第一次 Deploy 完成  
+2. 上方會有網址，例如：  
+   `https://komorebi-api.onrender.com`  
+3. 瀏覽器開：  
+   `https://komorebi-api.onrender.com/health`  
 
-### 3.5 公開網址
-
-1. **Settings → Networking → Generate Domain**  
-2. 會得到類似：  
-   `https://xxxxx.up.railway.app`  
-3. 用電腦瀏覽器開：  
-   `https://xxxxx.up.railway.app/health`  
-
-成功應看到：
+成功：
 
 ```json
 {"status":"ok"}
 ```
 
-若失敗：看 **Deployments → Logs**（常見：漏變數、Root Directory 不是 `backend`）。
+失敗就看 **Logs**（常見：Root 不是 `backend`、漏環境變數）。
 
-**把這個後端網址記下來**（等下前端要用）。
+**把這個後端網址記下來。**  
+若 `/health` 第一次很慢：多半是服務剛睡醒，等一下再重整。
 
 ---
 
-## 第 4 步：部署前端（Vercel）
+## 第 3 步：部署前端（Vercel，免費）
 
-### 4.1 註冊並匯入
+### 3.1 匯入專案
 
-1. 打開 https://vercel.com → 用 **GitHub** 登入  
-2. **Add New… → Project** → 選 `Jp-learning`  
+1. https://vercel.com → GitHub 登入  
+2. **Add New… → Project** → `Jp-learning`  
 3. 設定：
 
-| 欄位 | 填什麼 |
-|------|--------|
-| Framework Preset | Vite |
-| Root Directory | **`frontend`**（按 Edit 改） |
-| Build Command | `npm run build`（預設即可） |
+| 欄位 | 值 |
+|------|-----|
+| Framework | Vite |
+| Root Directory | **`frontend`** |
+| Build Command | `npm run build` |
 | Output Directory | `dist` |
 
-### 4.2 環境變數（Build 前就要設好）
-
-在 **Environment Variables** 新增：
+### 3.2 環境變數（Build 前設定）
 
 | Name | Value |
 |------|--------|
-| `VITE_API_BASE` | 第 3 步的後端網址，例如 `https://xxxxx.up.railway.app`（**不要**最後的 `/`） |
-| `VITE_SUPABASE_URL` | 同本機 frontend |
-| `VITE_SUPABASE_ANON_KEY` | 同本機 frontend |
+| `VITE_API_BASE` | Render 網址，如 `https://komorebi-api.onrender.com`（無結尾 `/`） |
+| `VITE_SUPABASE_URL` | 同本機 |
+| `VITE_SUPABASE_ANON_KEY` | 同本機 |
 
-Environment 勾選 **Production**（預覽環境若要測也可勾 Preview）。
+勾選 **Production** → **Deploy**。
 
-### 4.3 Deploy
+得到例如：`https://jp-learning-xxxx.vercel.app`
 
-按 **Deploy**，等完成。  
-得到類似：`https://jp-learning-xxxx.vercel.app`
+### 3.3 改後端 CORS（必做）
 
-用電腦開這個網址，應看得到 Komorebi 畫面。
-
-### 4.4 回頭改後端 CORS（很重要）
-
-回到 **Railway → Variables**，把：
-
-```text
-CORS_ORIGINS=http://localhost:5173
-```
-
-改成（換成你的真實前端網址）：
+回 **Render → Environment**，把 `CORS_ORIGINS` 改成：
 
 ```text
 CORS_ORIGINS=https://jp-learning-xxxx.vercel.app
 ```
 
-若本機還要打雲端 API，可寫兩個：
+（可同時保留本機：`https://….vercel.app,http://localhost:5173`）
 
-```text
-CORS_ORIGINS=https://jp-learning-xxxx.vercel.app,http://localhost:5173
-```
-
-改完後觸發一次 **Redeploy**（或等它自動重啟）。
+存檔後觸發 **Manual Deploy → Clear build cache & deploy**（或等自動重啟）。
 
 ---
 
-## 第 5 步：手機實測
+## 第 4 步：手機實測
 
-1. 手機連網，瀏覽器打開 **Vercel 前端網址**（HTTPS）  
-2. 依序試：首頁／Dashboard → 單字庫 → 單字卡 → 測驗一題  
-3. iPhone：分享 → **加入主畫面**（之後可再做正式 PWA）
+1. 手機打開 **Vercel** 網址  
+2. 測：Dashboard → 單字庫 → 單字卡 → 測驗  
+3. iPhone：分享 → **加入主畫面**
 
-第一次若很慢：Railway 免費層可能在「睡」，等 10–30 秒再重新整理。
+**第一次很慢是正常的**（Render 冷啟動）。醒來後再操作會快很多。
 
 ---
 
@@ -205,15 +175,15 @@ CORS_ORIGINS=https://jp-learning-xxxx.vercel.app,http://localhost:5173
 
 | 現象 | 怎麼辦 |
 |------|--------|
-| GitHub 上沒有 `backend` 資料夾 | 回到第 1 步 push |
-| `/health` 打不開 | Railway Logs；檢查 Root=`backend`、變數是否齊 |
-| 網頁開了但資料全錯／CORS | `CORS_ORIGINS` 必須是前端完整 `https://…`（與網址列完全一致） |
-| API 404 或打到錯地方 | `VITE_API_BASE` 錯了要改 Vercel 變數後 **Redeploy**（Vite 變數在 build 時寫死） |
-| 重整 `/vocab` 變 404 | 確認 repo 有 `frontend/vercel.json` 且已 push |
+| `/health` 一直轉圈 | 等 1 分鐘（冷啟動）；看 Render Logs |
+| CORS error | `CORS_ORIGINS` 必須與網址列前端 origin 完全一致（含 `https://`） |
+| 前端打不到 API | `VITE_API_BASE` 改完要在 Vercel **Redeploy** |
+| 重整 `/vocab` 404 | 確認有 `frontend/vercel.json` |
+| 月底服務被暫停 | Render Free 月時數用完；下月重置，或之後再考慮付費 |
 
 ---
 
-## 之後改程式怎麼更新？
+## 之後更新程式
 
 ```powershell
 git add …
@@ -221,15 +191,24 @@ git commit -m "…"
 git push
 ```
 
-Railway／Vercel 連著 GitHub 時通常會 **自動重新部署**。  
-若只改了 Vercel 的 `VITE_*`，要在 Vercel 手動 **Redeploy**。
+Render／Vercel 連 GitHub 後通常會自動重新部署。  
+只改 `VITE_*` 時，要在 Vercel 手動 **Redeploy**。
 
 ---
 
 ## 安全提醒
 
-- Service Role Key、Gemini Key **只**放 Railway Variables  
-- 前端只放 Supabase **publishable／anon** Key  
-- 不要把 `.env` commit 進 git  
+- Service Role、Gemini Key **只**放 Render Environment  
+- 前端只放 Supabase publishable／anon  
+- 不要 commit `.env`
 
-需要我幫你在本機執行「安全的第一次 commit + push」（排除 `.env`）的話，跟我說一聲即可。
+---
+
+## （可選）付費升級
+
+若受不了冷啟動，再考慮：
+
+- Render 付費 Instance（不休眠），或  
+- Railway Hobby（約 $5／月）
+
+目前以免費方案為準即可。

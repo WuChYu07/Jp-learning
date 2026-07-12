@@ -1,0 +1,35 @@
+# Render Blueprint — free FastAPI backend (Option A free path)
+# Docs: https://render.com/docs/blueprint-spec
+# In Render Dashboard you can also create the Web Service manually; this file is optional.
+
+services:
+  - type: web
+    name: komorebi-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SSL_VERIFY
+        value: "true"
+      - key: AUTH_ENABLED
+        value: "false"
+      # Set the rest in the Dashboard (do not commit secrets):
+      # CORS_ORIGINS, SUPABASE_*, GEMINI_*, NOTION_*, DEV_USER_ID
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false

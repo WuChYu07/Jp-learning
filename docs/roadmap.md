@@ -68,8 +68,8 @@
 | 層 | 建議 | 說明 |
 |----|------|------|
 | 資料庫 | 維持 **Supabase** | 已在雲端，不必塞進 Docker |
-| 後端 | **Railway / Render / Fly.io** 跑 FastAPI | 可 Docker，也可直接部署 Python |
-| 前端 | **Cloudflare Pages / Vercel / Netlify** | `npm run build` 後丟靜態檔 |
+| 後端 | **Render Free**（首選）或付費 Railway／Render | Free 會休眠＋冷啟動；DB 仍用 Supabase |
+| 前端 | **Vercel**／Cloudflare Pages | 靜態站，免費夠用 |
 | 手機體驗 | 先做 **響應式 + 可選 PWA** | 加到主畫面＝接近 App，免上架 |
 
 **不一定要「整包 Docker 丟雲端」才是正解。**  
@@ -109,11 +109,12 @@ docker-compose:
 
 ## 建議下一步順序
 
-1. ~~選部署方式~~ → **已選 A**（前端 Pages／Vercel + 後端 Railway／Render）  
+1. ~~選部署方式~~ → **已選免費方案**：Vercel（前端）+ **Render Free**（後端）+ Supabase  
 2. 依 **[docs/deploy-a.md](deploy-a.md)** 上線，手機實測單字卡與測驗  
 3. 回頭做 R1–R3（JLPT、單字補充、文法複習）與 R9（PWA／版面）
 
 ### 部署決策紀錄
 
-- **2026-07-11** — 採用 **方案 A**；方案 B（VPS + Docker Compose）暫緩。  
-  後端已備 `backend/Dockerfile`，前端已備 Vercel／Cloudflare SPA fallback。
+- **2026-07-11** — 方案 A（託管拆分）；暫緩 VPS + Docker Compose。  
+- **2026-07-12** — 後端改以 **Render Free** 為主（避免 Railway 付費）；接受冷啟動。  
+  後端備有 `backend/Dockerfile` 與根目錄 `render.yaml`；前端備 Vercel SPA fallback。

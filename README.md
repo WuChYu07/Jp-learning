@@ -86,9 +86,9 @@ Notion 單字表預期欄位：**發音｜單字｜中文｜例句｜補充**（
 
 ---
 
-## 雲端部署（手機可用）— 方案 A
+## 雲端部署（手機可用）— 免費方案
 
-已選定：**GitHub → Railway（後端）→ Vercel（前端）**，Supabase 繼續用雲端。
+**GitHub → Render Free（後端）→ Vercel（前端）**，Supabase 繼續用現有免費專案。
 
 完整逐步教學：
 
@@ -97,9 +97,10 @@ Notion 單字表預期欄位：**發音｜單字｜中文｜例句｜補充**（
 重點：
 
 1. 程式已在 GitHub（勿 push `.env`）
-2. Railway Root = `backend`（含 `Dockerfile`），設環境變數，開網域，測 `/health`
-3. Vercel Root = `frontend`，設 `VITE_API_BASE`＝後端 URL
-4. 後端 `CORS_ORIGINS` 改成前端 `https://…` 網域
+2. Render：Root = `backend`，Instance = **Free**，設環境變數，測 `/health`
+3. Vercel：Root = `frontend`，設 `VITE_API_BASE`＝Render 網址
+4. 後端 `CORS_ORIGINS` 改成前端 `https://…`
+5. 第一次開啟可能較慢（Render 約 15 分鐘閒置會睡，冷啟動 30–60 秒）
 
 產品方向與待辦：
 
@@ -135,7 +136,7 @@ jp-learning/
 │   │   └── services/         # SRS, Notion, enrichment, embeddings, …
 │   ├── migrations/           # 001–009
 │   ├── scripts/              # load_curated, seed, pipeline, backfill…
-│   ├── Dockerfile            # Railway / Render
+│   ├── Dockerfile            # Render / Railway 用
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -144,6 +145,7 @@ jp-learning/
 │   │   └── lib/              # api.ts, supabase, vocabDisplay
 │   ├── vercel.json
 │   └── package.json
+├── render.yaml               # （可選）Render Blueprint
 ├── data/
 │   ├── curated/              # vocabulary.csv, grammar.csv（可 seed）
 │   └── README.md             # 本機 PDF 管線說明（PDF 不進 git）
@@ -194,7 +196,7 @@ jp-learning/
 | Data | Supabase（PostgreSQL + Auth／Storage） |
 | AI | Google Gemini（生成＋ embedding） |
 | SRS | SM-2 |
-| Deploy | Railway／Render（API）· Vercel／Pages（靜態） |
+| Deploy | **Render Free**（API）· **Vercel**（前端）· Supabase |
 
 ---
 
@@ -202,7 +204,7 @@ jp-learning/
 
 | 文件 | 內容 |
 |------|------|
-| [docs/deploy-a.md](docs/deploy-a.md) | 雲端部署逐步教學 |
+| [docs/deploy-a.md](docs/deploy-a.md) | 免費雲端部署逐步教學（Render + Vercel） |
 | [docs/roadmap.md](docs/roadmap.md) | 產品待辦、手機使用策略 |
 | [docs/performance.md](docs/performance.md) | 效能問題紀錄（如 list N+1） |
 | [data/README.md](data/README.md) | 本機 PDF→CSV 資料管線 |
