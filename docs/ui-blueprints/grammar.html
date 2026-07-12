@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Grammar Hub - Komorebi Japanese</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&amp;family=Quicksand:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#00a3e4",
+                        "surface-container-highest": "#f2dfd4",
+                        "outline-variant": "#dcc1b1",
+                        "tertiary-fixed-dim": "#86cfff",
+                        "on-primary-container": "#502600",
+                        "primary-fixed-dim": "#ffb783",
+                        "on-surface-variant": "#564337",
+                        "surface-container-high": "#f8e4da",
+                        "surface": "#fff8f5",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#301400",
+                        "on-tertiary-fixed": "#001e2e",
+                        "primary": "#944a00",
+                        "tertiary-fixed": "#c7e7ff",
+                        "on-error-container": "#93000a",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed-variant": "#713700",
+                        "secondary": "#3c6926",
+                        "on-secondary-fixed": "#072100",
+                        "tertiary": "#00658f",
+                        "secondary-container": "#b9ef9b",
+                        "outline": "#897365",
+                        "primary-container": "#e67e22",
+                        "inverse-surface": "#392e27",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#231a13",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#e9d6cc",
+                        "secondary-fixed-dim": "#a1d584",
+                        "surface-tint": "#944a00",
+                        "on-tertiary-fixed-variant": "#004c6d",
+                        "inverse-primary": "#ffb783",
+                        "on-secondary": "#ffffff",
+                        "background": "#fff8f5",
+                        "primary-fixed": "#ffdcc5",
+                        "surface-container": "#feeadf",
+                        "on-surface": "#231a13",
+                        "on-secondary-container": "#406e2a",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#00354d",
+                        "surface-bright": "#fff8f5",
+                        "surface-variant": "#f2dfd4",
+                        "surface-container-low": "#fff1ea",
+                        "inverse-on-surface": "#ffede4",
+                        "secondary-fixed": "#bcf19d",
+                        "on-secondary-fixed-variant": "#25510f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "container-max": "1200px",
+                        "card-padding": "24px",
+                        "unit": "8px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Quicksand"],
+                        "body-md": ["Noto Sans"],
+                        "kanji-display": ["Noto Sans"],
+                        "headline-md": ["Quicksand"],
+                        "body-lg": ["Noto Sans"],
+                        "display-lg": ["Quicksand"],
+                        "display-lg-mobile": ["Quicksand"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "kanji-display": ["64px", { "lineHeight": "80px", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "40px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #FCF8F3; } /* Level 0 Base Cream */
+        .card-shadow { box-shadow: 0 4px 12px rgba(148, 74, 0, 0.08); } /* Subtle primary tinted ambient shadow */
+        .card-hover-shadow:hover { box-shadow: 0 8px 24px rgba(148, 74, 0, 0.12); transform: translateY(-2px); transition: all 0.2s ease-out; }
+    </style>
+</head>
+<body class="font-body-md text-on-background min-h-screen">
+<!-- SideNavBar (Web) -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-surface-container-low dark:bg-surface-dim shadow-sm py-8 px-4 z-20">
+<div class="mb-8 px-2 flex items-center gap-4">
+<!-- Avatar/Logo Placeholder -->
+<div class="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">Komorebi</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Japanese</p>
+</div>
+</div>
+<ul class="flex flex-col gap-2 flex-grow">
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant dark:text-outline hover:text-primary transition-colors hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-headline-md text-[18px]">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant dark:text-outline hover:text-primary transition-colors hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="style">style</span>
+<span class="font-headline-md text-[18px]">Vocabulary</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-primary dark:text-primary-fixed-dim font-bold border-r-4 border-primary dark:border-primary-fixed-dim bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book" data-weight="fill">menu_book</span>
+<span class="font-headline-md text-[18px]">Grammar</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant dark:text-outline hover:text-primary transition-colors hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="quiz">quiz</span>
+<span class="font-headline-md text-[18px]">Quizzes</span>
+</a>
+</li>
+</ul>
+</nav>
+<!-- TopNavBar (Web) -->
+<header class="hidden md:flex fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface dark:bg-background justify-between items-center px-margin-desktop z-10 no-shadow">
+<div class="flex items-center gap-2">
+<!-- Hidden Search -->
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-primary dark:text-primary-fixed-dim font-headline-md text-[16px]">
+<span class="material-symbols-outlined" data-icon="local_fire_department">local_fire_department</span>
+<span>Daily Streak: 12</span>
+</div>
+<div class="flex items-center gap-2 text-tertiary font-headline-md text-[16px]">
+<span class="material-symbols-outlined" data-icon="generating_tokens">generating_tokens</span>
+<span>Tokens: 450</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-outline-variant overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A small, circular avatar portrait of a mindful student studying in a well-lit, minimalist room with a warm, scholastic aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLf4aBNMFX8P5Xv1bjKRkANUD-SO-d7MQxws1qlrMnwiuFBS7f9BEPIK1T-iOVrLcjQWntJJDNoLk7X4SmJGlWIW6O7dyHk6n90dBaxGmg8oaIGDRr07xOzT_Dz6md9HQarOhP8hEz7fCKjMciPLCkaRW6lzXofgBhpcoJmk1XU4xQdcX-pTypE9hx-nRCw26VIat2iZ1JRKKkhJ_8Evwtize-Gk1d1FKfBthgnTaaApDgFuA_XqwJ3YhkSsKJb7l0dVK7NcbX6Hs"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="md:ml-64 pt-20 px-margin-mobile md:px-margin-desktop pb-12">
+<div class="max-w-[1000px] mx-auto">
+<header class="mb-8">
+<h2 class="font-display-lg-mobile md:font-display-lg text-primary mb-2">Grammar Hub</h2>
+<p class="font-body-lg text-on-surface-variant">Master sentence structures from foundational N5 to advanced N1.</p>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Filters & List -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- JLPT Filters -->
+<div class="bg-surface-container-lowest rounded-[24px] p-4 card-shadow flex gap-2 overflow-x-auto no-scrollbar">
+<button class="px-4 py-2 rounded-full bg-primary text-on-primary font-label-caps text-label-caps shrink-0">N5</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary transition-colors font-label-caps text-label-caps shrink-0">N4</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary transition-colors font-label-caps text-label-caps shrink-0">N3</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary transition-colors font-label-caps text-label-caps shrink-0">N2</button>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary transition-colors font-label-caps text-label-caps shrink-0">N1</button>
+</div>
+<!-- Grammar List -->
+<div class="flex flex-col gap-3">
+<button class="w-full text-left bg-surface-container-high rounded-[16px] p-4 border-l-4 border-primary">
+<h4 class="font-headline-md text-[18px] text-primary">〜てもいいですか</h4>
+<p class="font-body-md text-[14px] text-on-surface-variant truncate mt-1">Asking for permission</p>
+</button>
+<button class="w-full text-left bg-surface-container-lowest rounded-[16px] p-4 card-hover-shadow border border-transparent hover:border-outline-variant transition-colors">
+<h4 class="font-headline-md text-[18px] text-on-surface">〜なければなりません</h4>
+<p class="font-body-md text-[14px] text-on-surface-variant truncate mt-1">Expressing obligation or duty</p>
+</button>
+<button class="w-full text-left bg-surface-container-lowest rounded-[16px] p-4 card-hover-shadow border border-transparent hover:border-outline-variant transition-colors">
+<h4 class="font-headline-md text-[18px] text-on-surface">〜たことがあります</h4>
+<p class="font-body-md text-[14px] text-on-surface-variant truncate mt-1">Expressing past experience</p>
+</button>
+<button class="w-full text-left bg-surface-container-lowest rounded-[16px] p-4 card-hover-shadow border border-transparent hover:border-outline-variant transition-colors">
+<h4 class="font-headline-md text-[18px] text-on-surface">〜つもりです</h4>
+<p class="font-body-md text-[14px] text-on-surface-variant truncate mt-1">Expressing intention or plan</p>
+</button>
+</div>
+</div>
+<!-- Right Column: Detail View -->
+<div class="lg:col-span-8">
+<article class="bg-surface-container-lowest rounded-[24px] p-card-padding card-shadow h-full flex flex-col relative overflow-hidden">
+<!-- Decorative background element -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary-fixed-dim rounded-full blur-3xl opacity-20 -mr-16 -mt-16 pointer-events-none"></div>
+<div class="flex justify-between items-start mb-6 relative z-10">
+<div>
+<span class="inline-block font-label-caps text-label-caps text-primary bg-primary-fixed px-3 py-1 rounded-full mb-3">JLPT N5</span>
+<h3 class="font-headline-md text-[32px] text-on-background">〜てもいいですか</h3>
+<p class="font-body-lg text-outline mt-1">"Is it okay if...?" / "May I...?"</p>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-outline hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined" data-icon="bookmark_border">bookmark_border</span>
+</button>
+</div>
+<!-- Connection Rule Box -->
+<div class="bg-surface-container p-6 rounded-xl mb-8 border border-outline-variant border-opacity-30 relative z-10">
+<h4 class="font-label-caps text-label-caps text-on-surface-variant mb-3">Connection Rule</h4>
+<div class="flex items-center gap-3">
+<span class="font-headline-md text-[18px] text-primary">Verb (て-form)</span>
+<span class="material-symbols-outlined text-outline" data-icon="add">add</span>
+<span class="font-headline-md text-[18px] text-on-surface">もいいですか</span>
+</div>
+</div>
+<!-- Explanation -->
+<div class="mb-8 relative z-10">
+<h4 class="font-headline-md text-[20px] text-on-background mb-2">Explanation</h4>
+<p class="font-body-md text-on-surface-variant leading-relaxed">
+                                This grammar structure is used to ask for permission to do something. It implies a polite request, checking if an action is acceptable to the listener. To form it, conjugate the verb into its 'て-form' and attach 'もいいですか'.
+                            </p>
+</div>
+<!-- Examples -->
+<div class="mb-10 flex-grow relative z-10">
+<h4 class="font-headline-md text-[20px] text-on-background mb-4">Examples</h4>
+<div class="flex flex-col gap-4">
+<!-- Example 1 -->
+<div class="p-4 rounded-xl hover:bg-surface-container-lowest transition-colors border border-transparent hover:border-outline-variant group">
+<div class="flex justify-between items-start gap-4">
+<div>
+<p class="font-headline-md text-[20px] text-on-background mb-1">
+                                                写真を<span class="text-primary font-bold">撮ってもいいですか</span>。
+                                            </p>
+<p class="font-body-md text-outline">Shashin o tottemo ii desu ka.</p>
+<p class="font-body-md text-on-surface-variant mt-2">May I take a picture?</p>
+</div>
+<button class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary-fixed transition-colors shrink-0">
+<span class="material-symbols-outlined" data-icon="volume_up" data-weight="fill">volume_up</span>
+</button>
+</div>
+</div>
+<!-- Example 2 -->
+<div class="p-4 rounded-xl hover:bg-surface-container-lowest transition-colors border border-transparent hover:border-outline-variant group">
+<div class="flex justify-between items-start gap-4">
+<div>
+<p class="font-headline-md text-[20px] text-on-background mb-1">
+                                                ここに<span class="text-primary font-bold">座ってもいいですか</span>。
+                                            </p>
+<p class="font-body-md text-outline">Koko ni suwattemo ii desu ka.</p>
+<p class="font-body-md text-on-surface-variant mt-2">Is it okay if I sit here?</p>
+</div>
+<button class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary-fixed transition-colors shrink-0">
+<span class="material-symbols-outlined" data-icon="volume_up" data-weight="fill">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Action -->
+<div class="pt-6 border-t border-outline-variant border-opacity-30 mt-auto relative z-10 flex justify-end">
+<button class="bg-primary text-on-primary font-headline-md text-[16px] px-8 py-4 rounded-xl min-h-[48px] flex items-center gap-2 hover:bg-on-primary-container transition-colors shadow-sm hover:shadow-md">
+<span>Practice this structure</span>
+<span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</article>
+</div>
+</div>
+</div>
+</main>
+</body></html>

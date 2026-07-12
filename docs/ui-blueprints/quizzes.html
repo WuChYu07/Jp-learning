@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Komorebi Japanese - Quizzes</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Custom Ambient Shadow using Primary Color Tint */
+        .shadow-ambient {
+            box-shadow: 0 10px 40px -10px rgba(148, 74, 0, 0.08);
+        }
+        .shadow-ambient-hover {
+            box-shadow: 0 16px 50px -12px rgba(148, 74, 0, 0.15);
+        }
+
+        /* Gradient Progress Bar */
+        .progress-gradient {
+            background: linear-gradient(90deg, #ffb783 0%, #944a00 100%);
+        }
+
+        /* Matcha Green Glow for success */
+        .glow-success {
+            box-shadow: 0 0 20px rgba(60, 105, 38, 0.2);
+        }
+    </style>
+<!-- Tailwind Config -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-container": "#00a3e4",
+                    "surface-container-highest": "#f2dfd4",
+                    "outline-variant": "#dcc1b1",
+                    "tertiary-fixed-dim": "#86cfff",
+                    "on-primary-container": "#502600",
+                    "primary-fixed-dim": "#ffb783",
+                    "on-surface-variant": "#564337",
+                    "surface-container-high": "#f8e4da",
+                    "surface": "#fff8f5",
+                    "on-error": "#ffffff",
+                    "on-primary-fixed": "#301400",
+                    "on-tertiary-fixed": "#001e2e",
+                    "primary": "#944a00",
+                    "tertiary-fixed": "#c7e7ff",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "on-primary-fixed-variant": "#713700",
+                    "secondary": "#3c6926",
+                    "on-secondary-fixed": "#072100",
+                    "tertiary": "#00658f",
+                    "secondary-container": "#b9ef9b",
+                    "outline": "#897365",
+                    "primary-container": "#e67e22",
+                    "inverse-surface": "#392e27",
+                    "on-tertiary": "#ffffff",
+                    "on-background": "#231a13",
+                    "surface-container-lowest": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-dim": "#e9d6cc",
+                    "secondary-fixed-dim": "#a1d584",
+                    "surface-tint": "#944a00",
+                    "on-tertiary-fixed-variant": "#004c6d",
+                    "inverse-primary": "#ffb783",
+                    "on-secondary": "#ffffff",
+                    "background": "#fff8f5",
+                    "primary-fixed": "#ffdcc5",
+                    "surface-container": "#feeadf",
+                    "on-surface": "#231a13",
+                    "on-secondary-container": "#406e2a",
+                    "on-primary": "#ffffff",
+                    "on-tertiary-container": "#00354d",
+                    "surface-bright": "#fff8f5",
+                    "surface-variant": "#f2dfd4",
+                    "surface-container-low": "#fff1ea",
+                    "inverse-on-surface": "#ffede4",
+                    "secondary-fixed": "#bcf19d",
+                    "on-secondary-fixed-variant": "#25510f"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-mobile": "16px",
+                    "container-max": "1200px",
+                    "card-padding": "24px",
+                    "unit": "8px",
+                    "gutter": "24px",
+                    "margin-desktop": "40px"
+            },
+            "fontFamily": {
+                    "label-caps": [
+                            "Quicksand"
+                    ],
+                    "body-md": [
+                            "Noto Sans"
+                    ],
+                    "kanji-display": [
+                            "Noto Sans"
+                    ],
+                    "headline-md": [
+                            "Quicksand"
+                    ],
+                    "body-lg": [
+                            "Noto Sans"
+                    ],
+                    "display-lg": [
+                            "Quicksand"
+                    ],
+                    "display-lg-mobile": [
+                            "Quicksand"
+                    ]
+            },
+            "fontSize": {
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "kanji-display": [
+                            "64px",
+                            {
+                                    "lineHeight": "80px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-md": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "display-lg": [
+                            "40px",
+                            {
+                                    "lineHeight": "48px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "display-lg-mobile": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "fontWeight": "700"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased flex min-h-screen overflow-x-hidden selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- SideNavBar Component -->
+<nav class="hidden md:flex flex-col py-8 px-4 h-screen w-64 fixed left-0 top-0 bg-surface-container-low shadow-sm z-50 transition-all duration-300">
+<!-- Header -->
+<div class="flex items-center gap-4 px-4 mb-12">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden shrink-0">
+<img alt="Komorebi Japanese Logo" class="w-full h-full object-cover" data-alt="A minimalist, geometric logo featuring an abstract representation of a sun filtering through leaves, using soft terracotta and warm cream colors. The style is modern, vector-based, and calming." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDozmjT4vz56KJCGSOFJXd6ep39RAZy3W5od9bGLZFRXw94We9G8sdJu-YNN2ZHubUXid5qvrEynylMfpoHMt1ZNRBnTAC79fk44zQJmjxhKijrBuPXWhgr6FqaP5DNoWt1dZk093xsgFyI94NF-uD4eTgMaeDniSMGODVwY0ASyXq84EvPvzIZTpWfVLW608B-S8KcqmeNIh1iTzqhocv9RtEg--M3qROWbcGjTdEHcHEvxbAbMOXL_npdg-1TszVZhKKL4PFd2t4"/>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Komorebi</h1>
+<p class="font-label-caps text-label-caps text-outline">Japanese</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<ul class="flex flex-col gap-2">
+<!-- Inactive Tab 1 -->
+<li>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-[24px] group-hover:icon-fill transition-all">dashboard</span>
+<span class="font-headline-md text-body-lg font-medium">Dashboard</span>
+</a>
+</li>
+<!-- Inactive Tab 2 -->
+<li>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-[24px] group-hover:icon-fill transition-all">style</span>
+<span class="font-headline-md text-body-lg font-medium">Vocabulary</span>
+</a>
+</li>
+<!-- Inactive Tab 3 -->
+<li>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-[24px] group-hover:icon-fill transition-all">menu_book</span>
+<span class="font-headline-md text-body-lg font-medium">Grammar</span>
+</a>
+</li>
+<!-- Active Tab -->
+<li>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-primary font-bold border-r-4 border-primary bg-surface-container-high scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[24px] icon-fill">quiz</span>
+<span class="font-headline-md text-body-lg font-bold">Quizzes</span>
+</a>
+</li>
+</ul>
+</nav>
+<!-- TopNavBar Component -->
+<header class="hidden md:flex justify-between items-center px-margin-desktop fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface z-40 transition-all duration-300">
+<!-- Optional Left Content in Top Bar (Empty here as requested) -->
+<div></div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-6">
+<!-- Action 1 -->
+<div class="flex items-center gap-2 text-on-surface-variant hover:text-primary-container transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-[20px] text-primary group-hover:scale-110 transition-transform">local_fire_department</span>
+<span class="font-label-caps text-label-caps">Daily Streak: 12</span>
+</div>
+<!-- Action 2 -->
+<div class="flex items-center gap-2 text-on-surface-variant hover:text-primary-container transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-[20px] text-secondary group-hover:scale-110 transition-transform">generating_tokens</span>
+<span class="font-label-caps text-label-caps">Tokens: 450</span>
+</div>
+<!-- User Avatar -->
+<div class="w-8 h-8 rounded-full border border-outline-variant overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ml-2">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A soft, friendly 3D rendered avatar of a student wearing a casual sweater, warm lighting, soft minimalist style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAnzKUrUWoVpjAlOzfFP6mlgHp_-9z75f-O2E9Q_9XEbo9Ew9McUQuLHW0EL6LNVamdBhCJg-qSd09C1AORZix2miysueSj7NNycYcI2DFi8tFV30CnWb_wNOQCxCTtAN2bzB-77x782ZSEnUDyyTbggj2cObg7QLVGJzkAUvyfW2PA0X-Kuql4bNYOTLW9NRn2jds0LWNOtf71pM5iBjXMHHyEJoFU7IheCQNNevl9xk1NM4LpPChswuINNRLzVEYd_AEtBCF8DtE"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full md:ml-64 pt-16 md:pt-24 px-4 md:px-margin-desktop pb-12 flex-1 flex justify-center">
+<!-- Constrained Educational Container -->
+<div class="w-full max-w-[800px] flex flex-col gap-8">
+<!-- Header & Controls -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+<div>
+<h2 class="font-display-lg text-display-lg text-on-background">Daily Review</h2>
+<p class="font-body-md text-on-surface-variant mt-2">Test your knowledge and earn tokens.</p>
+</div>
+<!-- Toggle Control -->
+<div class="flex bg-surface-variant rounded-full p-1 border border-outline-variant/30 shadow-inner">
+<button class="toggle-btn active-toggle px-6 py-2 rounded-full font-headline-md text-label-caps transition-all duration-200 bg-surface text-primary shadow-sm" id="btn-4choice">
+                        4-Choice
+                    </button>
+<button class="toggle-btn px-6 py-2 rounded-full font-headline-md text-label-caps transition-all duration-200 text-on-surface-variant hover:text-primary" id="btn-translation">
+                        Translation
+                    </button>
+</div>
+</div>
+<!-- View 1: 4-Choice Quiz -->
+<div class="flex flex-col gap-8 animate-fade-in" id="view-4choice">
+<!-- Progress Header -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center px-1">
+<span class="font-label-caps text-label-caps text-outline">Question 3 of 10</span>
+<span class="font-label-caps text-label-caps text-primary">30%</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-full h-2 bg-[#E0D7D0] rounded-full overflow-hidden">
+<div class="h-full progress-gradient w-[30%] rounded-full transition-all duration-500"></div>
+</div>
+</div>
+<!-- Flashcard -->
+<div class="bg-surface-container-lowest rounded-[24px] p-card-padding shadow-ambient hover:shadow-ambient-hover transition-shadow duration-300 border border-outline-variant/20 flex flex-col items-center relative overflow-hidden group">
+<!-- Subtle background decoration -->
+<div class="absolute -top-24 -right-24 w-48 h-48 bg-primary-fixed opacity-20 rounded-full blur-3xl group-hover:opacity-30 transition-opacity"></div>
+<span class="font-label-caps text-label-caps text-primary bg-primary-fixed/30 px-3 py-1 rounded-full self-start mb-8">Vocabulary</span>
+<div class="font-kanji-display text-kanji-display text-on-background text-center my-12 tracking-widest">
+                        図書館
+                    </div>
+<div class="font-body-lg text-on-surface-variant text-center mb-4">
+                        Choose the correct reading:
+                    </div>
+</div>
+<!-- Answer Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Option 1 -->
+<button class="answer-btn bg-surface border-2 border-surface-variant rounded-[16px] p-6 text-center hover:border-primary hover:bg-surface-container-low transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-2 group relative overflow-hidden focus:outline-none focus:ring-4 focus:ring-primary-fixed">
+<span class="font-headline-md text-headline-md text-on-background group-hover:text-primary transition-colors">としょかん</span>
+<span class="font-body-md text-outline">toshokan</span>
+</button>
+<!-- Option 2 -->
+<button class="answer-btn bg-surface border-2 border-surface-variant rounded-[16px] p-6 text-center hover:border-primary hover:bg-surface-container-low transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-2 group relative overflow-hidden focus:outline-none focus:ring-4 focus:ring-primary-fixed">
+<span class="font-headline-md text-headline-md text-on-background group-hover:text-primary transition-colors">たいしかん</span>
+<span class="font-body-md text-outline">taishikan</span>
+</button>
+<!-- Option 3 -->
+<button class="answer-btn bg-surface border-2 border-surface-variant rounded-[16px] p-6 text-center hover:border-primary hover:bg-surface-container-low transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-2 group relative overflow-hidden focus:outline-none focus:ring-4 focus:ring-primary-fixed">
+<span class="font-headline-md text-headline-md text-on-background group-hover:text-primary transition-colors">はくぶつかん</span>
+<span class="font-body-md text-outline">hakubutsukan</span>
+</button>
+<!-- Option 4 -->
+<button class="answer-btn bg-surface border-2 border-surface-variant rounded-[16px] p-6 text-center hover:border-primary hover:bg-surface-container-low transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-2 group relative overflow-hidden focus:outline-none focus:ring-4 focus:ring-primary-fixed">
+<span class="font-headline-md text-headline-md text-on-background group-hover:text-primary transition-colors">ゆうびんきょく</span>
+<span class="font-body-md text-outline">yuubinkyoku</span>
+</button>
+</div>
+</div>
+<!-- View 2: Translation Quiz (Hidden initially) -->
+<div class="hidden flex-col gap-8 animate-fade-in" id="view-translation">
+<!-- Progress Header -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center px-1">
+<span class="font-label-caps text-label-caps text-outline">Question 4 of 10</span>
+<span class="font-label-caps text-label-caps text-primary">40%</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-full h-2 bg-[#E0D7D0] rounded-full overflow-hidden">
+<div class="h-full progress-gradient w-[40%] rounded-full transition-all duration-500"></div>
+</div>
+</div>
+<!-- Prompt Card -->
+<div class="bg-surface-container-lowest rounded-[24px] p-card-padding shadow-ambient border border-outline-variant/20 flex flex-col gap-6 relative overflow-hidden">
+<span class="font-label-caps text-label-caps text-tertiary bg-tertiary-fixed/40 px-3 py-1 rounded-full self-start">Translation</span>
+<div>
+<p class="font-body-md text-outline mb-2">Translate the following sentence into Japanese:</p>
+<h3 class="font-headline-md text-headline-md text-on-background">我昨天去了图书馆。</h3>
+<p class="font-body-md text-on-surface-variant mt-1 italic">"I went to the library yesterday."</p>
+</div>
+<!-- Input Area -->
+<div class="relative mt-4">
+<textarea class="w-full bg-surface border-2 border-surface-variant rounded-[16px] p-6 font-body-lg text-on-background focus:border-primary focus:ring-0 outline-none resize-none shadow-inner transition-colors placeholder:text-outline/50" id="translation-input" placeholder="日本語で入力してください..." rows="3"></textarea>
+<!-- Floating Submit Button -->
+<div class="flex justify-end mt-6">
+<button class="bg-primary text-on-primary font-headline-md text-body-lg rounded-[16px] py-4 px-8 hover:bg-primary-container transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" id="btn-submit-translation">
+<span>Submit</span>
+<span class="material-symbols-outlined text-[20px]">send</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Feedback Area (Hidden initially) -->
+<div class="hidden flex-col gap-4" id="feedback-area">
+<!-- Loading Status -->
+<div class="hidden flex items-center justify-center gap-3 py-8 text-primary" id="status-grading">
+<span class="material-symbols-outlined animate-spin text-[28px]">sync</span>
+<span class="font-headline-md text-body-lg font-medium tracking-wide">AI Grading in progress...</span>
+</div>
+<!-- Result Box -->
+<div class="hidden bg-surface-container-lowest rounded-[24px] p-card-padding border-2 border-secondary shadow-sm relative overflow-hidden glow-success" id="result-box">
+<!-- Success Banner -->
+<div class="absolute top-0 left-0 w-full h-2 bg-secondary"></div>
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[28px]">check_circle</span>
+</div>
+<div class="flex flex-col gap-3">
+<h4 class="font-headline-md text-headline-md text-on-background">Excellent work!</h4>
+<div class="bg-surface rounded-xl p-4 border border-outline-variant/30">
+<p class="font-body-md text-outline text-sm mb-1">Your Input:</p>
+<p class="font-body-lg text-on-background">昨日、図書館に行きました。</p>
+</div>
+<div class="mt-2">
+<h5 class="font-label-caps text-label-caps text-outline mb-2">Semantic Evaluation</h5>
+<p class="font-body-md text-on-surface-variant leading-relaxed">
+                                        Your translation is grammatically flawless and perfectly captures the meaning of the original sentence. Using "昨日 (kinou)" followed by the destination and the past tense verb "行きました (ikimashita)" is the most natural way to express this. 
+                                    </p>
+</div>
+<button class="mt-4 self-start bg-secondary text-on-secondary font-headline-md text-body-md rounded-xl py-2 px-6 hover:opacity-90 transition-opacity">
+                                    Next Question
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Inline Script for Interactions -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn4Choice = document.getElementById('btn-4choice');
+            const btnTranslation = document.getElementById('btn-translation');
+            const view4Choice = document.getElementById('view-4choice');
+            const viewTranslation = document.getElementById('view-translation');
+
+            const activeToggleClasses = ['bg-surface', 'text-primary', 'shadow-sm'];
+            const inactiveToggleClasses = ['text-on-surface-variant', 'hover:text-primary'];
+
+            function setToggleState(activeBtn, inactiveBtn, showView, hideView) {
+                // Update Buttons
+                activeBtn.classList.add(...activeToggleClasses);
+                activeBtn.classList.remove(...inactiveToggleClasses);
+                
+                inactiveBtn.classList.add(...inactiveToggleClasses);
+                inactiveBtn.classList.remove(...activeToggleClasses);
+
+                // Update Views
+                hideView.classList.add('hidden');
+                hideView.classList.remove('flex');
+                
+                showView.classList.remove('hidden');
+                showView.classList.add('flex');
+            }
+
+            btn4Choice.addEventListener('click', () => {
+                setToggleState(btn4Choice, btnTranslation, view4Choice, viewTranslation);
+            });
+
+            btnTranslation.addEventListener('click', () => {
+                setToggleState(btnTranslation, btn4Choice, viewTranslation, view4Choice);
+            });
+
+            // Answer Button Selection Logic (4-Choice)
+            const answerBtns = document.querySelectorAll('.answer-btn');
+            answerBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Remove selection from all
+                    answerBtns.forEach(b => {
+                        b.classList.remove('border-secondary', 'bg-secondary-container/20', 'shadow-sm');
+                        b.classList.add('border-surface-variant');
+                        const icon = b.querySelector('.selection-icon');
+                        if(icon) icon.remove();
+                    });
+
+                    // Add selection to clicked
+                    this.classList.remove('border-surface-variant');
+                    this.classList.add('border-secondary', 'bg-secondary-container/20', 'shadow-sm');
+                });
+            });
+
+            // Translation Submit Flow
+            const submitBtn = document.getElementById('btn-submit-translation');
+            const feedbackArea = document.getElementById('feedback-area');
+            const statusGrading = document.getElementById('status-grading');
+            const resultBox = document.getElementById('result-box');
+            const inputField = document.getElementById('translation-input');
+
+            submitBtn.addEventListener('click', () => {
+                if(!inputField.value.trim()) {
+                    inputField.classList.add('border-error');
+                    setTimeout(() => inputField.classList.remove('border-error'), 1000);
+                    return;
+                }
+
+                // Disable input and button
+                inputField.disabled = true;
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-50');
+
+                // Show Grading Status
+                feedbackArea.classList.remove('hidden');
+                feedbackArea.classList.add('flex');
+                statusGrading.classList.remove('hidden');
+                resultBox.classList.add('hidden');
+
+                // Simulate API call delay
+                setTimeout(() => {
+                    statusGrading.classList.add('hidden');
+                    resultBox.classList.remove('hidden');
+                }, 1500);
+            });
+        });
+    </script>
+</body></html>
