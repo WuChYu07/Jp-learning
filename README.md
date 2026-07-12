@@ -1,48 +1,61 @@
 # Komorebi Japanese — 日文學習 Web App
 
-一個開源的日文學習工具，支援單字卡複習、四選一測驗、AI 翻譯批改、自訂學習資料匯入。
+自帶筆記、自帶資料庫、自帶 Gemini Key 的日文學習工具。  
+單字／文法來自 **Notion 筆記或 CSV**，支援複習、測驗、語意關聯圖譜，以及 **AI 草稿 → 小視窗確認後才寫入**。
 
-**設計理念：** 每個使用者帶自己的 Supabase 資料庫和 Gemini API Key，擁有自己的 Komorebi。
+**設計理念：** 每個使用者擁有自己的 Supabase 與 Gemini API Key，資料與額度都在自己手上。
 
 ---
 
-## Quick Start
+## 功能總覽
 
-### 1. 建立 Supabase 專案（免費）
+| 功能 | 說明 |
+|------|------|
+| **單字庫** | 列表摘要＋詳情（單字／發音／中文／例句／補充）；手修與 AI 補充皆經確認小視窗 |
+| **單字卡複習** | 滑動字卡（不熟／熟悉），SM-2 間隔重複 |
+| **文法中心** | 多用法、接續、例句、圖片；手修／AI 解釋／從圖片補全 → 確認後才套用 |
+| **知識圖譜** | 文法／單字關聯網絡；語意向量（Gemini embedding）可重算連邊 |
+| **四選一測驗** | 讀音／意思隨機出題 |
+| **翻譯測驗** | 中文→日文，Gemini 批改評分 |
+| **資料匯入** | Notion 同步（不耗 AI）、CSV、文字貼上（AI）、PDF／圖片上傳 |
+| **Dashboard** | 學習統計與入口 |
 
-1. 前往 [supabase.com](https://supabase.com) 建立帳號和專案
-2. 進入 SQL Editor，執行 `backend/migrations/001_initial_schema.sql`
-3. 從 Settings → API 取得：
-   - **Project URL** (`https://xxx.supabase.co`)
-   - **Anon Key** (`sb_publishable_...`)
-   - **Service Role Key** (`sb_secret_...`)
+---
 
-### 2. 取得 Gemini API Key
+## 本機 Quick Start
 
-1. 前往 [Google AI Studio](https://aistudio.google.com/apikey) 建立免費 API Key
-2. 免費方案限制：15 RPM / 100 萬 tokens/天（[詳細額度](https://ai.google.dev/pricing)）
-3. 也可以使用付費方案以獲得更高額度和更強的模型
+### 1. Supabase（免費）
 
-### 3. 設定環境變數
+1. 建立專案：[supabase.com](https://supabase.com)
+2. SQL Editor **依序**執行 `backend/migrations/`：
+   - `001_initial_schema.sql` … 到 `009_vocab_notes.sql`  
+   （已有專案可只補尚未執行的 migration）
+3. 取得 **Project URL**、**Publishable（anon）Key**、**Secret（service_role）Key**
 
-```bash
+### 2. Gemini API Key
+
+1. [Google AI Studio](https://aistudio.google.com/apikey)
+2. 建議模型：`gemini-2.5-flash`（見 `backend/.env.example`）
+
+### 3. 環境變數
+
+```powershell
 # Backend
-cp backend/.env.example backend/.env
-# 編輯 backend/.env，填入你的 Supabase 和 Gemini 資訊
+copy backend\.env.example backend\.env
+# 填入 Supabase、Gemini；單人模式可 AUTH_ENABLED=false
 
 # Frontend
-cp frontend/.env.example frontend/.env
-# 編輯 frontend/.env，填入 Supabase URL 和 Anon Key
+copy frontend\.env.example frontend\.env
+# VITE_SUPABASE_* ；本機 VITE_API_BASE 留空（走 Vite proxy）
 ```
 
 ### 4. 啟動
 
-```bash
+```powershell
 # Backend
 cd backend
 python -m venv .venv
-.venv\Scripts\Activate.ps1   # Windows
-# source .venv/bin/activate  # macOS/Linux
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
@@ -52,146 +65,147 @@ npm install
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- Backend API docs: http://localhost:8000/docs
+| 服務 | URL |
+|------|-----|
+| Frontend | http://localhost:5173 |
+| API docs | http://localhost:8000/docs |
+| Health | http://localhost:8000/health |
 
-### 5. 匯入學習資料
+### 5. 匯入資料（擇一）
 
-```bash
-# 匯入範例 CSV 資料（558 單字 + 280 文法）
+```powershell
 cd backend
+# Notion：在 App「匯入」頁做同步預覽 → 確認（需 NOTION_*）
+# 或 CSV 種子
 python scripts/load_curated.py
-
-# 或只匯入種子測試資料（5 單字 + 4 文法）
+# 或極小測試集
 python scripts/seed_test_data.py
 ```
 
----
-
-## 功能總覽
-
-| 功能 | 說明 |
-|------|------|
-| **單字卡複習** | 滑動式字卡，左滑不熟 / 右滑熟悉，SM-2 間隔重複演算法 |
-| **文法中心** | 瀏覽文法句型、接續規則、多個用法與例句 |
-| **四選一測驗** | 隨機出題，交替測讀音和意思 |
-| **翻譯測驗** | 中文→日文翻譯，Gemini AI 即時批改評分 |
-| **資料匯入** | 支援 CSV 上傳、文字貼上（AI 解析）、PDF/圖片上傳 |
-| **Dashboard** | 學習統計、進度追蹤 |
+Notion 單字表預期欄位：**發音｜單字｜中文｜例句｜補充**（見 parser）。
 
 ---
 
-## ⚠️ AI Token 消耗說明
+## 雲端部署（手機可用）— 方案 A
 
-本 App 使用 **Google Gemini API** 處理以下功能，每次呼叫都會消耗你的 API 額度：
+已選定：**GitHub → Railway（後端）→ Vercel（前端）**，Supabase 繼續用雲端。
 
-| 功能 | 觸發時機 | 預估消耗 |
-|------|----------|----------|
-| **翻譯測驗批改** | 每次提交翻譯答案 | ~200-500 tokens/次 |
-| **文字貼上解析** | 貼上筆記文字並送出解析 | ~500-2000 tokens/次（依文字量） |
-| **PDF/圖片上傳** | 上傳檔案自動解析 | ~1000-5000 tokens/次（圖片更貴） |
+完整逐步教學：
 
-**不消耗 Token 的功能：**
-- 單字卡複習（純本地 / 資料庫操作）
-- 四選一測驗（從資料庫出題）
-- CSV 匯入（純格式解析，不呼叫 AI）
-- 文法瀏覽
-- Dashboard
+→ **[docs/deploy-a.md](docs/deploy-a.md)**
 
-### 免費額度建議
+重點：
 
-Gemini Free Tier（`gemini-2.0-flash`）每天約 100 萬 tokens，正常學習使用綽綽有餘。如果你大量上傳 PDF 或頻繁使用翻譯測驗，建議留意 [Google AI Studio](https://aistudio.google.com/) 的用量儀表板。
+1. 程式已在 GitHub（勿 push `.env`）
+2. Railway Root = `backend`（含 `Dockerfile`），設環境變數，開網域，測 `/health`
+3. Vercel Root = `frontend`，設 `VITE_API_BASE`＝後端 URL
+4. 後端 `CORS_ORIGINS` 改成前端 `https://…` 網域
 
-### 使用付費模型
+產品方向與待辦：
 
-如果你想使用更強的模型（如 `gemini-2.5-pro`），只需在 `backend/.env` 修改：
+→ **[docs/roadmap.md](docs/roadmap.md)**
 
-```env
-GEMINI_API_KEY=your-paid-api-key
-GEMINI_MODEL=gemini-2.5-pro
-```
+---
+
+## AI Token 消耗
+
+| 功能 | 觸發 | 約略消耗 |
+|------|------|----------|
+| 翻譯測驗批改 | 提交答案 | 低～中 |
+| 單字／文法 AI 補充或解釋 | 按 AI、產生草稿 | 中（確認前不寫 DB） |
+| 語意關聯／embedding | 同步或重算 | 中～高（批次時） |
+| 文字貼上／PDF／圖片解析 | 匯入 | 中～高 |
+
+**通常不耗 Gemini：** 單字卡、四選一、CSV、Notion 規則解析、瀏覽列表／詳情、Dashboard。
+
+額度請看 [Google AI Studio](https://aistudio.google.com/)。改模型只需在後端環境變數設 `GEMINI_MODEL`。
 
 ---
 
 ## 專案結構
 
 ```
-komorebi/
+jp-learning/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/          # API routes (vocab, grammar, quiz, ingestion, dashboard)
-│   │   ├── core/            # Config, security, HTTP client
-│   │   ├── db/              # Supabase client
-│   │   ├── models/schemas/  # Pydantic models
-│   │   └── services/        # Business logic (SRS, quiz, ingestion, Gemini)
-│   ├── migrations/          # SQL schema
-│   ├── scripts/             # CLI tools (seed, load CSV, data pipeline)
+│   │   ├── api/v1/           # vocab, grammar, quiz, notion, links, …
+│   │   ├── core/             # config, security, HTTP
+│   │   ├── db/               # Supabase
+│   │   ├── models/schemas/
+│   │   └── services/         # SRS, Notion, enrichment, embeddings, …
+│   ├── migrations/           # 001–009
+│   ├── scripts/              # load_curated, seed, pipeline, backfill…
+│   ├── Dockerfile            # Railway / Render
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── components/      # SwipeFlashcard, Layout
-│   │   ├── pages/           # Dashboard, Vocab, Grammar, Quiz, Upload
-│   │   └── lib/             # API client, Supabase client
+│   │   ├── components/       # 字卡、關聯圖、編輯小視窗…
+│   │   ├── pages/            # Dashboard, Vocab, Review, Grammar, Quiz, Map, Upload
+│   │   └── lib/              # api.ts, supabase, vocabDisplay
+│   ├── vercel.json
 │   └── package.json
 ├── data/
-│   ├── curated/             # Cleaned CSV data (vocabulary.csv, grammar.csv)
-│   └── extracted/           # Raw extracted data
-└── docs/ui-blueprints/      # Design system & HTML mockups
+│   ├── curated/              # vocabulary.csv, grammar.csv（可 seed）
+│   └── README.md             # 本機 PDF 管線說明（PDF 不進 git）
+├── docs/
+│   ├── deploy-a.md           # 雲端從頭部署
+│   ├── roadmap.md            # 待辦與手機策略
+│   ├── performance.md        # 效能問題日誌
+│   └── ui-blueprints/        # 早期設計稿
+└── README.md
 ```
 
 ---
 
-## 環境變數
+## 環境變數摘要
 
-### Backend (`backend/.env`)
-
-| 變數 | 必填 | 說明 |
-|------|------|------|
-| `SUPABASE_URL` | ✅ | 你的 Supabase 專案 URL |
-| `SUPABASE_ANON_KEY` | ✅ | Supabase Publishable Key |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase Secret Key（僅後端使用） |
-| `GEMINI_API_KEY` | ✅ | Google Gemini API Key |
-| `GEMINI_MODEL` | — | 預設 `gemini-2.0-flash`，可改為付費模型 |
-| `AUTH_ENABLED` | — | `false`（單人模式） / `true`（多使用者） |
-| `DEV_USER_ID` | — | 單人模式下的 Supabase User UUID（選填） |
-| `SSL_VERIFY` | — | Windows 本地開發設 `false` |
-
-### Frontend (`frontend/.env`)
+### Backend（`backend/.env`）
 
 | 變數 | 必填 | 說明 |
 |------|------|------|
-| `VITE_SUPABASE_URL` | — | 同 backend（登入功能用，目前未啟用） |
-| `VITE_SUPABASE_ANON_KEY` | — | 同 backend |
-| `VITE_API_BASE` | — | 留空即可（Vite proxy 到 :8000） |
+| `SUPABASE_URL` | ✅ | 專案 URL |
+| `SUPABASE_ANON_KEY` | ✅ | Publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Secret key（僅後端） |
+| `GEMINI_API_KEY` | ✅ | Gemini |
+| `GEMINI_MODEL` | — | 預設見 `.env.example` |
+| `CORS_ORIGINS` | ✅（雲端） | 逗號分隔前端 origin |
+| `AUTH_ENABLED` | — | `false`＝單人；`true`＝要 JWT |
+| `DEV_USER_ID` | — | 單人 SRS 用的 user UUID |
+| `NOTION_TOKEN` / `NOTION_*_PAGE_ID` | — | Notion 同步 |
+
+### Frontend（`frontend/.env`）
+
+| 變數 | 必填 | 說明 |
+|------|------|------|
+| `VITE_SUPABASE_URL` | 建議 | 同後端 URL |
+| `VITE_SUPABASE_ANON_KEY` | 建議 | Publishable only |
+| `VITE_API_BASE` | 雲端必填 | 本機可空；正式站填後端 `https://…`（無結尾 `/`） |
+
+完整範例見 `backend/.env.example`、`frontend/.env.example`。
 
 ---
 
 ## Tech Stack
 
-- **Frontend:** React 19 + Vite 6 + Tailwind CSS 4
-- **Backend:** Python FastAPI + Supabase (PostgreSQL)
-- **AI:** Google Gemini API (使用者自帶 Key)
-- **SRS:** SM-2 Spaced Repetition Algorithm
+| 層 | 技術 |
+|----|------|
+| Frontend | React 19 · Vite 6 · Tailwind CSS 4 · React Router |
+| Backend | FastAPI · Uvicorn · Pydantic |
+| Data | Supabase（PostgreSQL + Auth／Storage） |
+| AI | Google Gemini（生成＋ embedding） |
+| SRS | SM-2 |
+| Deploy | Railway／Render（API）· Vercel／Pages（靜態） |
 
 ---
 
-## 效能與問題紀錄
+## 文件索引
 
-頁面載入慢、關聯跳轉慢等問題的根因與解法，集中寫在：
-
-→ **[docs/performance.md](docs/performance.md)**
-
-之後若再遇到效能議題，請依該檔頂部的格式追加一筆，方便回頭對照「遇過什麼、為什麼、怎麼解」。
-
-## 產品待辦與手機部署
-
-功能 backlog、優先順序，以及「要在手機上用」的部署建議：
-
-→ **[docs/roadmap.md](docs/roadmap.md)**
-
-**方案 A（已選定）上線步驟：**
-
-→ **[docs/deploy-a.md](docs/deploy-a.md)**
+| 文件 | 內容 |
+|------|------|
+| [docs/deploy-a.md](docs/deploy-a.md) | 雲端部署逐步教學 |
+| [docs/roadmap.md](docs/roadmap.md) | 產品待辦、手機使用策略 |
+| [docs/performance.md](docs/performance.md) | 效能問題紀錄（如 list N+1） |
+| [data/README.md](data/README.md) | 本機 PDF→CSV 資料管線 |
 
 ---
 
