@@ -27,25 +27,24 @@ _ENRICH_PROMPT = """你是一位日文單字老師，請為學習者補齊筆記
 
 ## 語言
 - notes_zh、例句 chinese 使用繁體中文。
-- 不要輸出英文說明；例句不要填 english。
+- 不要輸出英文。
 
 ## 欄位規則
-- example_sentences：若輸入標示 needs_examples=true，請給 1–2 句自然例句。
-  每句 japanese 必填；盡量附 chinese；可選 reading（平假名）。
-  例句應能自然用到該單字（活用形亦可）。
-- notes_zh：若輸入標示 needs_notes=true，請寫簡潔補充（用法時機、與近義詞差別、助詞搭配等），風格像學習筆記，不要太長。
-- 若 needs_examples=false，example_sentences 請回傳空陣列。
-- 若 needs_notes=false，notes_zh 請回傳 null。
-- part_of_speech：可選，僅在明顯可判斷時填（noun/verb/i_adjective/na_adjective/adverb/particle/counter/expression/other）。
-- jlpt_level：可選，N5–N1 或 unknown。
+- example_sentences：若 needs_examples=true，給 1–2 句短例句。
+  每句只要 japanese（必填）與 chinese（建議）；reading 可選。
+  不要填 english、highlight、acceptable_patterns。
+- notes_zh：若 needs_notes=true，寫 1–3 句簡潔補充（用法／近義／助詞），總長勿超過 120 字。
+- 若 needs_examples=false，example_sentences 回傳 []。
+- 若 needs_notes=false，notes_zh 回傳 null。
+- part_of_speech / jlpt_level：僅在需要且明顯可判斷時填。
 
 ## 禁止
-- 不要改寫單字本身或發音。
-- 不要改寫既有中文意思。
-- 不要編造罕見或錯誤用法。
+- 不要改寫單字或既有中文意思。
+- 不要寫長文或多餘欄位。
 
 ## JSON
-- 只回傳可解析的 JSON，不要 markdown 圍欄。
+- 只回傳可解析的短 JSON，不要 markdown。
+- 字串內勿出現未跳脫換行。
 """
 
 
@@ -73,6 +72,30 @@ def _parse_enrichment_payload(raw: str | None) -> VocabEnrichmentOutput:
         raise ValueError(f"AI 回傳的 JSON 不完整或格式錯誤：{exc}") from exc
 
 
+def _generate_enrichment(
+    client: genai.Client,
+    contents: list[object],
+    *,
+    max_output_tokens: int,
+) -> VocabEnrichmentOutput:
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=VocabEnrichmentOutput,
+            temperature=0.2,
+            max_output_tokens=max_output_tokens,
+        ),
+    )
+    parsed = getattr(response, "parsed", None)
+    if isinstance(parsed, VocabEnrichmentOutput):
+        return parsed
+    if isinstance(parsed, dict):
+        return VocabEnrichmentOutput.model_validate(parsed)
+    return _parse_enrichment_payload(response.text)
+
+
 def _raise_gemini_http_error(exc: Exception) -> None:
     message = str(exc)
     if "429" in message or "RESOURCE_EXHAUSTED" in message:
@@ -82,6 +105,16 @@ def _raise_gemini_http_error(exc: Exception) -> None:
                 "Gemini API 額度已用完。請到 Google AI Studio 充值或更換 API key，"
                 "之後再按「AI 補充」。"
             ),
+        ) from exc
+    if (
+        "JSON" in message
+        or "Unterminated string" in message
+        or "EOF while parsing" in message
+        or "json_invalid" in message
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 補充失敗：回傳內容過長被截斷，請再試一次。",
         ) from exc
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
@@ -120,36 +153,32 @@ class VocabEnrichmentService:
             else primary.part_of_speech,
             "needs_examples": needs_examples,
             "needs_notes": needs_notes,
-            "existing_examples": [
-                ex.model_dump(mode="json") for ex in (primary.example_sentences or [])
-            ],
+            "needs_pos": needs_pos,
+            "needs_jlpt": needs_jlpt,
+            "existing_examples_count": len(primary.example_sentences or []),
             "existing_notes_zh": primary.notes_zh,
         }
         contents: list[object] = [
             json.dumps(payload, ensure_ascii=False),
-            "Return a single VocabEnrichmentOutput JSON object. Fill only requested gaps.",
+            "Return a single VocabEnrichmentOutput JSON object. Fill only requested gaps. Keep it short.",
             _ENRICH_PROMPT,
         ]
 
         client = _get_client()
         try:
-            response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=VocabEnrichmentOutput,
-                    temperature=0.2,
-                    max_output_tokens=4096,
-                ),
-            )
-            parsed = getattr(response, "parsed", None)
-            if isinstance(parsed, VocabEnrichmentOutput):
-                enriched = parsed
-            elif isinstance(parsed, dict):
-                enriched = VocabEnrichmentOutput.model_validate(parsed)
-            else:
-                enriched = _parse_enrichment_payload(response.text)
+            enriched: VocabEnrichmentOutput | None = None
+            last_error: Exception | None = None
+            for max_tokens in (8192, 12288):
+                try:
+                    enriched = _generate_enrichment(
+                        client, contents, max_output_tokens=max_tokens
+                    )
+                    break
+                except ValueError as exc:
+                    last_error = exc
+                    continue
+            if enriched is None:
+                raise ValueError(str(last_error or "AI 補充失敗"))
         except HTTPException:
             raise
         except Exception as exc:
@@ -163,7 +192,6 @@ class VocabEnrichmentService:
                     reading=clean_text(ex.reading),
                     chinese=clean_text(ex.chinese),
                     english=None,
-                    highlight=ex.highlight,
                 )
                 for ex in enriched.example_sentences
                 if (ex.japanese or "").strip()

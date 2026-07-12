@@ -1,8 +1,12 @@
-# ── Secrets ──────────────────────────────────────────────────────────────────
+# ── Secrets（絕對不要 commit／push）──────────────────────────────────────────
+# 真實金鑰放 backend/.env、frontend/.env；只允許提交 *.env.example 範本
 .env
 .env.*
 !.env.example
 !**/.env.example
+**/credentials.json
+**/service-account*.json
+*.pem
 
 # ── Python ───────────────────────────────────────────────────────────────────
 .venv/

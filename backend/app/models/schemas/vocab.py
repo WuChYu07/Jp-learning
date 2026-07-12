@@ -71,10 +71,18 @@ class VocabularySummary(BaseModel):
     meaning_zh: str | None = None
 
 
+class VocabExampleEnrichment(BaseModel):
+    """Compact example for Gemini vocab fill-gap (keeps JSON small)."""
+
+    japanese: str
+    reading: str | None = None
+    chinese: str | None = None
+
+
 class VocabEnrichmentOutput(BaseModel):
     """Gemini fill-gap payload for one vocabulary entry (does not rewrite headword)."""
 
-    example_sentences: list[ExampleSentence] = Field(default_factory=list)
+    example_sentences: list[VocabExampleEnrichment] = Field(default_factory=list)
     notes_zh: str | None = None
     part_of_speech: PartOfSpeech | None = None
     jlpt_level: JlptLevel | None = None

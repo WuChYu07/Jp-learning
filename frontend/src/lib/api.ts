@@ -253,8 +253,7 @@ export type LinkRelationType =
   | "contrast"
   | "confusable"
   | "prerequisite"
-  | "derived"
-  | "example_vocab";
+  | "derived";
 
 export type GraphNode = {
   id: string;
@@ -552,9 +551,4 @@ export const api = {
     }),
   deleteLink: (id: string) =>
     request<void>(`/api/v1/graph/links/${id}`, { method: "DELETE" }),
-  syncExampleVocab: (grammarId: string) =>
-    request<{ created: number; skipped: number; matched_words: string[] }>(
-      `/api/v1/graph/sync-example-vocab/grammar/${grammarId}`,
-      { method: "POST" },
-    ),
 };

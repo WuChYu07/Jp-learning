@@ -4,7 +4,6 @@ Seed content_links from Teacher KB + curated synonym clusters.
 Usage (from backend/):
   python -m scripts.seed_content_links
   python -m scripts.seed_content_links --dry-run
-  python -m scripts.seed_content_links --with-example-vocab
 """
 
 from __future__ import annotations
@@ -27,9 +26,6 @@ from app.models.schemas.links import (  # noqa: E402
 )
 from app.services.curriculum.grammar_kb import normalize_pattern  # noqa: E402
 from app.services.curriculum.grammar_teacher_kb import TEACHER_GRAMMAR  # noqa: E402
-from app.services.example_vocab_link_service import (  # noqa: E402
-    example_vocab_link_service,
-)
 from app.services.link_service import link_service  # noqa: E402
 
 # Patterns often referenced in teacher notes (longest first for matching)
@@ -399,11 +395,6 @@ def seed_from_supplementary_blocks(dry_run: bool) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed content_links knowledge graph")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument(
-        "--with-example-vocab",
-        action="store_true",
-        help="Also extract example_vocab edges from grammar examples",
-    )
     args = parser.parse_args()
 
     print("=== Seeding synonym clusters ===")
@@ -420,11 +411,6 @@ def main() -> None:
     print("=== Seeding from supplementary_blocks ===")
     parsed_stats = seed_from_supplementary_blocks(args.dry_run)
     print(f"links≈{parsed_stats['links']} unmatched={parsed_stats['unmatched']}")
-
-    if args.with_example_vocab and not args.dry_run:
-        print("=== Syncing example_vocab edges ===")
-        ev = example_vocab_link_service.sync_all()
-        print(ev)
 
     print("Done.")
 

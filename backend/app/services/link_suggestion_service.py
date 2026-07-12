@@ -180,8 +180,6 @@ class LinkSuggestionService:
                 relation = LinkRelationType(rel_raw)
             except ValueError:
                 relation = LinkRelationType.CONTRAST
-            if relation == LinkRelationType.EXAMPLE_VOCAB:
-                continue
             confidence = float(item.get("confidence") or 0.7)
             confidence = max(0.0, min(1.0, confidence))
             suggestions.append(

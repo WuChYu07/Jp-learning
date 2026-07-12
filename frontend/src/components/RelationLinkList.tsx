@@ -11,7 +11,6 @@ export const RELATION_LABELS: Record<LinkRelationType, string> = {
   confusable: "易混淆",
   prerequisite: "先修",
   derived: "延伸",
-  example_vocab: "例句單字",
 };
 
 export const RELATION_COLORS: Record<LinkRelationType, string> = {
@@ -20,7 +19,6 @@ export const RELATION_COLORS: Record<LinkRelationType, string> = {
   confusable: "#d97706",
   prerequisite: "#7c3aed",
   derived: "#059669",
-  example_vocab: "#78716c",
 };
 
 type Props = {

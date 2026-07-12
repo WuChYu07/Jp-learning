@@ -5,7 +5,6 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
-from pydantic import BaseModel
 
 from app.models.schemas.links import (
     ConfirmLinksRequest,
@@ -20,19 +19,11 @@ from app.models.schemas.links import (
     RelationGraphOut,
     SuggestLinksResponse,
 )
-from app.services.example_vocab_link_service import example_vocab_link_service
 from app.services.link_service import link_service
 from app.services.link_suggestion_service import link_suggestion_service
 from app.services.semantic_link_service import semantic_link_service
 
 router = APIRouter()
-
-
-class SyncExampleVocabResponse(BaseModel):
-    created: int
-    skipped: int
-    matched_words: list[str] = []
-    grammars_processed: int | None = None
 
 
 @router.get("", response_model=RelationGraphOut)
@@ -160,28 +151,6 @@ def sync_semantic_grammar(grammar_id: UUID) -> dict:
 @router.post("/sync-semantic/vocabulary/{vocabulary_id}")
 def sync_semantic_vocabulary(vocabulary_id: UUID) -> dict:
     return semantic_link_service.sync_vocabulary(vocabulary_id, force=True)
-
-
-@router.post(
-    "/sync-example-vocab/grammar/{grammar_id}",
-    response_model=SyncExampleVocabResponse,
-)
-def sync_example_vocab(grammar_id: UUID) -> SyncExampleVocabResponse:
-    result = example_vocab_link_service.sync_for_grammar(grammar_id)
-    return SyncExampleVocabResponse(**result)
-
-
-@router.post("/sync-example-vocab", response_model=SyncExampleVocabResponse)
-def sync_all_example_vocab(
-    limit: int = Query(default=200, ge=1, le=1000),
-) -> SyncExampleVocabResponse:
-    result = example_vocab_link_service.sync_all(limit=limit)
-    return SyncExampleVocabResponse(
-        created=result["created"],
-        skipped=result["skipped"],
-        matched_words=[],
-        grammars_processed=result["grammars_processed"],
-    )
 
 
 def _parse_entity_types(raw: str | None) -> list[LinkEntityType] | None:

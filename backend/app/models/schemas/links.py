@@ -20,7 +20,6 @@ class LinkRelationType(str, Enum):
     CONFUSABLE = "confusable"
     PREREQUISITE = "prerequisite"
     DERIVED = "derived"
-    EXAMPLE_VOCAB = "example_vocab"
 
 
 class ContentLinkCreate(BaseModel):

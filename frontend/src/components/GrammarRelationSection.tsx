@@ -43,7 +43,6 @@ export default function GrammarRelationSection({
   const [manualLabel, setManualLabel] = useState("");
   const [manualNote, setManualNote] = useState("");
   const [savingManual, setSavingManual] = useState(false);
-  const [syncingVocab, setSyncingVocab] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,22 +104,6 @@ export default function GrammarRelationSection({
       setError(err instanceof Error ? err.message : "語意同步失敗");
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const handleSyncExampleVocab = async () => {
-    setSyncingVocab(true);
-    setError("");
-    try {
-      const res = await api.syncExampleVocab(grammar.id);
-      await load();
-      if (res.created === 0 && res.matched_words.length === 0) {
-        setError("例句中未匹配到資料庫單字");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "同步例句單字失敗");
-    } finally {
-      setSyncingVocab(false);
     }
   };
 
@@ -192,14 +175,6 @@ export default function GrammarRelationSection({
             className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
           >
             {syncing ? "計算中..." : "重新計算語意關聯"}
-          </button>
-          <button
-            type="button"
-            onClick={handleSyncExampleVocab}
-            disabled={syncingVocab}
-            className="rounded-full bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {syncingVocab ? "同步中..." : "連結例句單字"}
           </button>
         </div>
       </div>

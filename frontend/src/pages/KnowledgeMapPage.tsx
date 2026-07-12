@@ -17,7 +17,6 @@ const RELATION_FILTERS: Array<LinkRelationType | ""> = [
   "confusable",
   "prerequisite",
   "derived",
-  "example_vocab",
 ];
 
 export default function KnowledgeMapPage() {

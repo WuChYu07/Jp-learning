@@ -9,8 +9,7 @@ CREATE TYPE public.link_relation_type AS ENUM (
     'contrast',        -- 對比差異
     'confusable',      -- 易混淆
     'prerequisite',    -- 先修
-    'derived',         -- 延伸句型
-    'example_vocab'    -- 例句中的關鍵單字
+    'derived'          -- 延伸句型
 );
 
 CREATE TABLE public.semantic_concepts (

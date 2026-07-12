@@ -306,16 +306,16 @@ export default function GrammarForm({
                     className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="讀音（可選）"
                   />
-                  <div className="flex gap-2">
-                    <input
-                      value={ex.chinese || ""}
-                      onChange={(e) =>
-                        updateExample(usageIndex, exIndex, { chinese: e.target.value })
-                      }
-                      className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
-                      placeholder="中文翻譯（可選）"
-                    />
-                    {usage.example_sentences.length > 1 && (
+                  <input
+                    value={ex.chinese || ""}
+                    onChange={(e) =>
+                      updateExample(usageIndex, exIndex, { chinese: e.target.value })
+                    }
+                    className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
+                    placeholder="中文翻譯（可選）"
+                  />
+                  {usage.example_sentences.length > 1 && (
+                    <div className="flex items-center justify-end border-t border-stone-100 pt-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -325,12 +325,12 @@ export default function GrammarForm({
                             ),
                           })
                         }
-                        className="shrink-0 text-xs text-red-600"
+                        className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
                       >
                         刪
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
