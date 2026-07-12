@@ -145,7 +145,7 @@
 
 勾選 **Production** → **Deploy**。
 
-得到例如：`https://jp-learning-xxxx.vercel.app`
+得到例如：`https://jp-learning-two.vercel.app/`
 
 ### 3.3 改後端 CORS（必做）
 

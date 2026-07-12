@@ -277,7 +277,7 @@ export default function GrammarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${selectedId ? "hidden md:flex" : ""}`}>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold">文法中心</h1>
         <button
           type="button"
@@ -290,7 +290,11 @@ export default function GrammarPage() {
       {error && <p className="text-red-600">{error}</p>}
 
       <div className="grid gap-6 md:grid-cols-[260px_1fr]">
-        <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
+        <div
+          className={`max-h-[75vh] space-y-2 overflow-y-auto pr-1 ${
+            selectedId ? "hidden md:block" : "block"
+          }`}
+        >
           {items.map((item) => (
             <button
               key={item.id}
@@ -298,6 +302,7 @@ export default function GrammarPage() {
               onClick={() => {
                 setSelectedId(item.id);
                 closeEditor();
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               className={`w-full rounded-xl px-4 py-3 text-left text-sm transition ${
                 selectedId === item.id
@@ -319,13 +324,36 @@ export default function GrammarPage() {
           )}
         </div>
 
-        {detailLoading && !selected && (
-          <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
-        )}
+        <div className={selectedId ? "block" : "hidden md:block"}>
+          {selectedId && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedId(null);
+                setSelected(null);
+                closeEditor();
+              }}
+              className="mb-3 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-stone-700 ring-1 ring-orange-100 md:hidden"
+            >
+              ← 返回列表
+            </button>
+          )}
 
-        {selected && (
+          {detailLoading && !selected && (
+            <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
+          )}
+
+          {!selected && !detailLoading && (
+            <p className="py-12 text-center text-sm text-stone-400">
+              {items.length === 0
+                ? "尚無文法，可按右上角「新增文法」開始。"
+                : "選擇左側文法查看詳情"}
+            </p>
+          )}
+
+          {selected && (
           <div className="space-y-5">
-            <div className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
+            <div className="rounded-2xl bg-white p-5 ring-1 ring-orange-100 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <JlptBadge level={selected.jlpt_level} />
@@ -454,13 +482,8 @@ export default function GrammarPage() {
                 />
               ))}
           </div>
-        )}
-
-        {!selected && items.length === 0 && (
-          <p className="py-12 text-center text-sm text-stone-400">
-            尚無文法，可按右上角「新增文法」開始。
-          </p>
-        )}
+          )}
+        </div>
       </div>
 
       {(editorMode === "create" || editorMode === "edit") && (

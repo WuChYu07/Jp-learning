@@ -116,7 +116,7 @@ export default function VocabPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className={`flex flex-wrap items-start justify-between gap-4 ${selectedId ? "hidden md:flex" : ""}`}>
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-[var(--color-primary-dark)]">
             單字庫
@@ -127,13 +127,13 @@ export default function VocabPage() {
         </div>
         <Link
           to="/vocab/review"
-          className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          className="w-full rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-center text-sm font-semibold text-white shadow-sm transition hover:opacity-90 sm:w-auto"
         >
           開始單字卡 →
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex flex-wrap items-center gap-2 ${selectedId ? "hidden md:flex" : ""}`}>
         <select
           value={jlpt}
           onChange={(e) => setJlpt(e.target.value)}
@@ -164,14 +164,21 @@ export default function VocabPage() {
 
       {!loading && (
         <div className="grid gap-6 md:grid-cols-[260px_1fr]">
-          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+          <div
+            className={`max-h-[70vh] space-y-2 overflow-y-auto pr-1 ${
+              selectedId ? "hidden md:block" : "block"
+            }`}
+          >
             {filtered.map((item) => {
               const { primary, secondary } = vocabDisplay(item.word, item.reading);
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
                   className={`w-full rounded-xl px-4 py-3 text-left text-sm transition ${
                     selectedId === item.id
                       ? "bg-[var(--color-primary)] text-white"
@@ -201,32 +208,46 @@ export default function VocabPage() {
             )}
           </div>
 
-          {detailLoading && !selected ? (
-            <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
-          ) : selected ? (
-            <VocabDetail
-              vocab={selected}
-              onSaved={(updated) => {
-                setSelected(updated);
-                setItems((prev) =>
-                  prev.map((item) =>
-                    item.id === updated.id
-                      ? {
-                          ...item,
-                          word: updated.word,
-                          reading: updated.reading,
-                          jlpt_level: updated.jlpt_level,
-                          meaning_zh: updated.definitions[0]?.meaning_zh ?? item.meaning_zh,
-                        }
-                      : item,
-                  ),
-                );
-              }}
-              onError={setError}
-            />
-          ) : (
-            <p className="py-12 text-center text-sm text-stone-400">選擇左側單字查看詳情</p>
-          )}
+          <div className={selectedId ? "block" : "hidden md:block"}>
+            {selectedId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedId(null);
+                  setSelected(null);
+                }}
+                className="mb-3 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-stone-700 ring-1 ring-orange-100 md:hidden"
+              >
+                ← 返回列表
+              </button>
+            )}
+            {detailLoading && !selected ? (
+              <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
+            ) : selected ? (
+              <VocabDetail
+                vocab={selected}
+                onSaved={(updated) => {
+                  setSelected(updated);
+                  setItems((prev) =>
+                    prev.map((item) =>
+                      item.id === updated.id
+                        ? {
+                            ...item,
+                            word: updated.word,
+                            reading: updated.reading,
+                            jlpt_level: updated.jlpt_level,
+                            meaning_zh: updated.definitions[0]?.meaning_zh ?? item.meaning_zh,
+                          }
+                        : item,
+                    ),
+                  );
+                }}
+                onError={setError}
+              />
+            ) : (
+              <p className="py-12 text-center text-sm text-stone-400">選擇左側單字查看詳情</p>
+            )}
+          </div>
         </div>
       )}
     </div>
