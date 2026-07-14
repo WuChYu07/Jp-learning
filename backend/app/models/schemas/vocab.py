@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.schemas.common import ExampleSentence, JlptLevel, PartOfSpeech
+from app.models.schemas.grammar import SyncChange
 
 
 class VocabularyDefinitionBase(BaseModel):
@@ -33,6 +34,7 @@ class VocabularyItemInput(BaseModel):
     reading: str | None = None
     jlpt_level: JlptLevel = JlptLevel.UNKNOWN
     definitions: list[VocabularyDefinitionBase] = Field(min_length=1)
+    sync_change: SyncChange | None = None
 
     @field_validator("jlpt_level", mode="before")
     @classmethod

@@ -23,6 +23,13 @@ class NotionPageSource(BaseModel):
     section_count: int = 0
 
 
+class NotionOrphanedGrammar(BaseModel):
+    id: str
+    grammar_point: str
+    notion_block_id: str | None = None
+    notion_page_id: str | None = None
+
+
 class NotionSyncPreview(BaseModel):
     focus: NotionFocus
     page_id: str
@@ -39,6 +46,10 @@ class NotionSyncPreview(BaseModel):
     grammar_new_count: int = 0
     grammar_updated_count: int = 0
     grammar_unchanged_count: int = 0
+    vocab_new_count: int = 0
+    vocab_updated_count: int = 0
+    vocab_unchanged_count: int = 0
+    orphaned_grammars: list[NotionOrphanedGrammar] = Field(default_factory=list)
     sources: list[NotionPageSource] = Field(default_factory=list)
 
 
@@ -48,3 +59,6 @@ class NotionConfirmRequest(BaseModel):
     page_id: str
     page_title: str | None = None
     focus: NotionFocus = "both"
+    force: bool = False
+    force_overwrite_grammar_block_ids: list[str] = Field(default_factory=list)
+    archive_grammar_ids: list[str] = Field(default_factory=list)

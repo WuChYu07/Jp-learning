@@ -56,6 +56,9 @@ function NotionSync() {
   const [preview, setPreview] = useState<NotionSyncPreview | null>(null);
   const [selectedGrammar, setSelectedGrammar] = useState<Set<number>>(new Set());
   const [selectedVocab, setSelectedVocab] = useState<Set<number>>(new Set());
+  const [forceOverwriteGrammar, setForceOverwriteGrammar] = useState<Set<string>>(new Set());
+  const [selectedArchive, setSelectedArchive] = useState<Set<string>>(new Set());
+  const [forceConfirm, setForceConfirm] = useState(false);
   const [result, setResult] = useState<IngestionResponse | null>(null);
   const [error, setError] = useState("");
 
@@ -65,6 +68,9 @@ function NotionSync() {
     setError("");
     setPreview(null);
     setResult(null);
+    setForceOverwriteGrammar(new Set());
+    setSelectedArchive(new Set());
+    setForceConfirm(false);
     try {
       const res = await api.notionSync(focus, pageId.trim() || undefined);
       if ("ingestion_id" in res) {
@@ -72,16 +78,7 @@ function NotionSync() {
         return;
       }
       setPreview(res);
-      const defaultGrammar = new Set(
-        res.parsed.grammars
-          .map((item, i) => ({ item, i }))
-          .filter(({ item }) => item.sync_change !== "unchanged")
-          .map(({ i }) => i),
-      );
-      if (defaultGrammar.size === 0) {
-        res.parsed.grammars.forEach((_, i) => defaultGrammar.add(i));
-      }
-      setSelectedGrammar(defaultGrammar);
+      setSelectedGrammar(new Set(res.parsed.grammars.map((_, i) => i)));
       setSelectedVocab(new Set(res.parsed.vocabularies.map((_, i) => i)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Notion 同步失敗");
@@ -96,7 +93,14 @@ function NotionSync() {
     setError("");
     try {
       const filtered = {
-        grammars: preview.parsed.grammars.filter((_, i) => selectedGrammar.has(i)),
+        grammars: preview.parsed.grammars
+          .filter((_, i) => selectedGrammar.has(i))
+          .map((item) => ({
+            ...item,
+            force_overwrite: item.notion_block_id
+              ? forceOverwriteGrammar.has(item.notion_block_id)
+              : false,
+          })),
         vocabularies: preview.parsed.vocabularies.filter((_, i) => selectedVocab.has(i)),
       };
       const res = await api.notionConfirm(
@@ -105,6 +109,11 @@ function NotionSync() {
         preview.page_id,
         preview.page_title,
         preview.focus,
+        {
+          force: forceConfirm,
+          force_overwrite_grammar_block_ids: [...forceOverwriteGrammar],
+          archive_grammar_ids: [...selectedArchive],
+        },
       );
       setResult(res);
       setPreview(null);
@@ -124,13 +133,35 @@ function NotionSync() {
     });
   }
 
+  function toggleBlockId(
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    id: string,
+  ) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const hasPreviewItems =
+    preview &&
+    (preview.parsed.grammars.length > 0 ||
+      preview.parsed.vocabularies.length > 0 ||
+      preview.orphaned_grammars.length > 0);
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-stone-600">
         從 Notion 筆記同步。在 backend/.env 分別設定 NOTION_VOCAB_PAGE_ID 與 NOTION_GRAMMAR_PAGE_ID。
       </p>
       <div className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
-        不消耗 AI Token · 流程：同步預覽 → 人工審核 → 確認匯入 DB
+        不消耗 AI Token · 流程：同步預覽 → 勾選新增／更新 → 確認匯入
+        <br />
+        <span className="text-emerald-700">
+          綠色＝全新 · 橘色＝有變更（預設只更新圖片／meta，勾「強制覆蓋」才整筆替換）· 無變更項目不顯示
+        </span>
       </div>
 
       <FocusSelector value={focus} onChange={setFocus} />
@@ -160,22 +191,30 @@ function NotionSync() {
             <p className="mt-1 text-xs text-stone-500">
               {preview.focus === "both" ? "單字 + 文法" : preview.focus === "vocabulary" ? "單字" : "文法"}
               {" · "}
-              {preview.grammar_count} 文法 · {preview.vocabulary_count} 單字 · {preview.image_count} 圖片
-              {preview.grammar_new_count > 0 || preview.grammar_updated_count > 0 ? (
+              預覽 {preview.grammar_count} 文法 · {preview.vocabulary_count} 單字
+              {preview.grammar_unchanged_count + preview.vocab_unchanged_count > 0 && (
                 <>
                   {" · "}
-                  <span className="text-emerald-600">{preview.grammar_new_count} 新增</span>
-                  {" · "}
-                  <span className="text-amber-600">{preview.grammar_updated_count} 更新</span>
-                  {preview.grammar_unchanged_count > 0 && (
-                    <>
-                      {" · "}
-                      <span className="text-stone-400">{preview.grammar_unchanged_count} 無變更</span>
-                    </>
-                  )}
+                  <span className="text-stone-400">
+                    已略過 {preview.grammar_unchanged_count + preview.vocab_unchanged_count} 無變更
+                  </span>
                 </>
-              ) : null}
-              {preview.unchanged ? " · 頁面未變更" : ""}
+              )}
+              {(preview.grammar_new_count > 0 ||
+                preview.grammar_updated_count > 0 ||
+                preview.vocab_new_count > 0 ||
+                preview.vocab_updated_count > 0) && (
+                <>
+                  {" · "}
+                  <span className="text-emerald-600">
+                    {preview.grammar_new_count + preview.vocab_new_count} 新增
+                  </span>
+                  {" · "}
+                  <span className="text-amber-600">
+                    {preview.grammar_updated_count + preview.vocab_updated_count} 更新
+                  </span>
+                </>
+              )}
             </p>
             {preview.sources.length > 1 && (
               <ul className="mt-2 space-y-1 text-xs text-stone-500">
@@ -188,105 +227,172 @@ function NotionSync() {
             )}
           </div>
 
+          {!hasPreviewItems && (
+            <div className="rounded-xl bg-stone-50 p-6 text-center text-sm text-stone-600 ring-1 ring-stone-200">
+              與資料庫一致，沒有需要匯入的新增或更新項目。
+            </div>
+          )}
+
           {preview.parsed.grammars.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-stone-500">文法（可取消勾選排除）</p>
-              {preview.parsed.grammars.map((item, index) => (
-                <label
-                  key={`${item.grammar_point}-${index}`}
-                  className="flex gap-3 rounded-xl bg-white p-3 ring-1 ring-stone-100"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedGrammar.has(index)}
-                    onChange={() => toggleSet(setSelectedGrammar, index)}
-                    className="mt-1"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-stone-800">
-                      {item.grammar_point}
-                      {item.sync_change === "new" && (
-                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-700">
-                          新增
-                        </span>
-                      )}
-                      {item.sync_change === "updated" && (
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-700">
-                          更新
-                        </span>
-                      )}
-                      {item.sync_change === "unchanged" && (
-                        <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs font-normal text-stone-500">
-                          無變更
-                        </span>
-                      )}
-                      {item.usages.length > 1 && (
-                        <span className="ml-2 text-xs font-normal text-stone-500">
-                          {item.usages.length} 種用法
-                        </span>
-                      )}
-                    </p>
-                    {item.usages.length > 1 ? (
-                      <ul className="mt-1 space-y-0.5 text-xs text-stone-600">
-                        {item.usages.map((usage, usageIndex) => (
-                          <li key={usageIndex}>
-                            {usageIndex + 1}. {usage.semantic_concept}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      item.usages[0]?.meaning_zh && (
-                        <p className="mt-1 text-xs text-stone-600">{item.usages[0].meaning_zh}</p>
-                      )
-                    )}
-                    {item.image_urls && item.image_urls.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {item.image_urls.slice(0, 3).map((url) => (
-                          <img
-                            key={url}
-                            src={url}
-                            alt=""
-                            className="h-16 w-16 rounded-lg object-cover ring-1 ring-stone-200"
+              <p className="text-xs font-medium text-stone-500">文法</p>
+              {preview.parsed.grammars.map((item, index) => {
+                const isNew = item.sync_change === "new";
+                const isUpdated = item.sync_change === "updated";
+                const ring = isNew
+                  ? "ring-emerald-200 bg-emerald-50/40"
+                  : isUpdated
+                    ? "ring-amber-200 bg-amber-50/40"
+                    : "ring-stone-100";
+                return (
+                  <label
+                    key={`${item.notion_block_id ?? item.grammar_point}-${index}`}
+                    className={`flex gap-3 rounded-xl bg-white p-3 ring-1 ${ring}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedGrammar.has(index)}
+                      onChange={() => toggleSet(setSelectedGrammar, index)}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-stone-800">
+                        {item.grammar_point}
+                        {isNew && (
+                          <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-700">
+                            全新
+                          </span>
+                        )}
+                        {isUpdated && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-800">
+                            有變更
+                          </span>
+                        )}
+                      </p>
+                      {isUpdated && item.notion_block_id && (
+                        <label className="mt-2 flex items-center gap-2 text-xs text-amber-900">
+                          <input
+                            type="checkbox"
+                            checked={forceOverwriteGrammar.has(item.notion_block_id)}
+                            onChange={() =>
+                              toggleBlockId(setForceOverwriteGrammar, item.notion_block_id!)
+                            }
                           />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </label>
-              ))}
+                          強制以 Notion 覆蓋正文與用法
+                        </label>
+                      )}
+                      {item.usages.length > 1 ? (
+                        <ul className="mt-1 space-y-0.5 text-xs text-stone-600">
+                          {item.usages.map((usage, usageIndex) => (
+                            <li key={usageIndex}>
+                              {usageIndex + 1}. {usage.semantic_concept}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        item.usages[0]?.meaning_zh && (
+                          <p className="mt-1 text-xs text-stone-600">{item.usages[0].meaning_zh}</p>
+                        )
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
             </div>
           )}
 
           {preview.parsed.vocabularies.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-stone-500">單字</p>
-              {preview.parsed.vocabularies.map((item, index) => (
+              <p className="text-xs font-medium text-stone-500">
+                單字（已存在者不覆寫意思，只補空例句／筆記）
+              </p>
+              {preview.parsed.vocabularies.map((item, index) => {
+                const isNew = item.sync_change === "new";
+                const isUpdated = item.sync_change === "updated";
+                const ring = isNew
+                  ? "ring-emerald-200 bg-emerald-50/40"
+                  : isUpdated
+                    ? "ring-amber-200 bg-amber-50/40"
+                    : "ring-stone-100";
+                return (
+                  <label
+                    key={`${item.word}-${index}`}
+                    className={`flex gap-3 rounded-xl bg-white p-3 ring-1 ${ring}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedVocab.has(index)}
+                      onChange={() => toggleSet(setSelectedVocab, index)}
+                      className="mt-1"
+                    />
+                    <div>
+                      <p className="font-medium">
+                        {item.word}
+                        {isNew && (
+                          <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-700">
+                            全新
+                          </span>
+                        )}
+                        {isUpdated && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-800">
+                            有變更
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-stone-500">
+                        {item.reading} — {item.definitions[0]?.meaning_zh}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {preview.orphaned_grammars.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-stone-500">
+                Notion 已移除 · App 仍有（勾選則 archive）
+              </p>
+              {preview.orphaned_grammars.map((item) => (
                 <label
-                  key={`${item.word}-${index}`}
-                  className="flex gap-3 rounded-xl bg-white p-3 ring-1 ring-stone-100"
+                  key={item.id}
+                  className="flex gap-3 rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200"
                 >
                   <input
                     type="checkbox"
-                    checked={selectedVocab.has(index)}
-                    onChange={() => toggleSet(setSelectedVocab, index)}
+                    checked={selectedArchive.has(item.id)}
+                    onChange={() => toggleBlockId(setSelectedArchive, item.id)}
                     className="mt-1"
                   />
                   <div>
-                    <p className="font-medium">{item.word}</p>
-                    <p className="text-xs text-stone-500">
-                      {item.reading} — {item.definitions[0]?.meaning_zh}
-                    </p>
+                    <p className="font-medium text-stone-700">{item.grammar_point}</p>
+                    <p className="text-xs text-stone-500">僅存在於 App，Notion 頁面已找不到</p>
                   </div>
                 </label>
               ))}
             </div>
           )}
 
+          <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs text-stone-600 ring-1 ring-stone-100">
+            <input
+              type="checkbox"
+              checked={forceConfirm}
+              onChange={(e) => setForceConfirm(e.target.checked)}
+            />
+            強制寫入（略過整頁快取；同一頁重複 Confirm 時請勾選）
+          </label>
+
           <div className="flex gap-3">
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={confirming || (selectedGrammar.size === 0 && selectedVocab.size === 0)}
+              disabled={
+                confirming ||
+                (selectedGrammar.size === 0 &&
+                  selectedVocab.size === 0 &&
+                  selectedArchive.size === 0)
+              }
               className="flex-1 rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md transition hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
             >
               {confirming ? "匯入中..." : "確認匯入"}

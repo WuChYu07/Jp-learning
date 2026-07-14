@@ -9,13 +9,24 @@ from app.core.config import settings
 from app.db.supabase import get_supabase_client
 from app.models.schemas.common import SourceType
 from app.models.schemas.ingestion import IngestionParseResult, IngestionResponse
-from app.models.schemas.notion import NotionFocus, NotionPageSource, NotionSyncPreview
+from app.models.schemas.notion import (
+    NotionFocus,
+    NotionOrphanedGrammar,
+    NotionPageSource,
+    NotionSyncPreview,
+)
+from app.services.grammar_service import grammar_service
 from app.services.hash_service import sha256_hex
 from app.services.ingestion_service import ingestion_service
 from app.services.notion.analyzer import analyze_blocks
 from app.services.notion.client import NotionClient, NotionClientError, extract_page_title
 from app.services.notion.pages import NotionPageConfigError, resolve_page_targets
-from app.services.notion.diff import annotate_grammar_sync_changes
+from app.services.notion.diff import (
+    annotate_grammar_sync_changes,
+    annotate_vocab_sync_changes,
+    filter_sync_preview_items,
+    find_orphaned_notion_grammars,
+)
 from app.services.notion.parser import parse_blocks
 from app.services import storage_service
 
@@ -47,10 +58,14 @@ class NotionSyncService:
         hash_parts: list[str] = []
         unchanged = True
         grammar_new = grammar_updated = grammar_unchanged = 0
+        vocab_new = vocab_updated = vocab_unchanged = 0
+        grammar_page_ids: list[str] = []
 
         try:
             with NotionClient(settings.NOTION_TOKEN) as client:
                 for page_focus, resolved_page_id in targets:
+                    if page_focus in {"grammar", "both"}:
+                        grammar_page_ids.append(resolved_page_id)
                     page = client.get_page(resolved_page_id)
                     blocks = client.fetch_all_blocks(resolved_page_id)
                     if upload_images:
@@ -77,6 +92,16 @@ class NotionSyncService:
                             for item in parsed.grammars:
                                 item.sync_change = "new"
                             grammar_new += len(parsed.grammars)
+                    if page_focus in {"vocabulary", "both"} and parsed.vocabularies:
+                        try:
+                            vn, vu, vc = annotate_vocab_sync_changes(parsed.vocabularies, self.db)
+                            vocab_new += vn
+                            vocab_updated += vu
+                            vocab_unchanged += vc
+                        except Exception:
+                            for item in parsed.vocabularies:
+                                item.sync_change = "new"
+                            vocab_new += len(parsed.vocabularies)
                     page_hash = self._compute_sync_hash(resolved_page_id, page, blocks)
                     hash_parts.append(page_hash)
 
@@ -110,6 +135,17 @@ class NotionSyncService:
         page_title = _combined_title(sources)
         display_page_id = "+".join(source.page_id for source in sources)
 
+        present_block_ids = {
+            g.notion_block_id for g in merged.grammars if g.notion_block_id
+        }
+        orphaned = find_orphaned_notion_grammars(
+            self.db,
+            notion_page_ids=grammar_page_ids,
+            present_block_ids=present_block_ids,
+        )
+
+        filter_sync_preview_items(merged.grammars, merged.vocabularies)
+
         return NotionSyncPreview(
             focus=focus,
             page_id=display_page_id,
@@ -126,6 +162,18 @@ class NotionSyncService:
             grammar_new_count=grammar_new,
             grammar_updated_count=grammar_updated,
             grammar_unchanged_count=grammar_unchanged,
+            vocab_new_count=vocab_new,
+            vocab_updated_count=vocab_updated,
+            vocab_unchanged_count=vocab_unchanged,
+            orphaned_grammars=[
+                NotionOrphanedGrammar(
+                    id=o.id,
+                    grammar_point=o.grammar_point,
+                    notion_block_id=o.notion_block_id,
+                    notion_page_id=o.notion_page_id,
+                )
+                for o in orphaned
+            ],
             sources=sources,
         )
 
@@ -139,14 +187,39 @@ class NotionSyncService:
         *,
         focus: NotionFocus = "both",
         auto_approved: bool = False,
+        force: bool = False,
+        force_overwrite_grammar_block_ids: list[str] | None = None,
+        archive_grammar_ids: list[str] | None = None,
     ) -> IngestionResponse:
+        force_blocks = set(force_overwrite_grammar_block_ids or [])
+        for item in parsed.grammars:
+            if item.notion_block_id and item.notion_block_id in force_blocks:
+                item.force_overwrite = True
+
+        for grammar_id in archive_grammar_ids or []:
+            try:
+                from uuid import UUID
+
+                grammar_service.archive_grammar(UUID(grammar_id))
+            except Exception:
+                continue
+
+        effective_hash = content_hash
+        if force:
+            effective_hash = sha256_hex(
+                f"{content_hash}|force|{len(parsed.grammars)}|{len(parsed.vocabularies)}".encode(
+                    "utf-8"
+                )
+            )
+
         response = ingestion_service.process_parsed_data(
             parsed=parsed,
-            content_hash=content_hash,
+            content_hash=effective_hash,
             user_id=user_id,
             source_type=SourceType.NOTION,
             mime_type="application/notion",
             file_name=page_title or page_id,
+            skip_ingestion_cache=force,
         )
         for source in _split_page_ids(page_id):
             self._write_sync_log(

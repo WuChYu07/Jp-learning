@@ -53,6 +53,9 @@ def confirm_notion_sync(
         user_id=user_id,
         focus=body.focus,
         auto_approved=False,
+        force=body.force,
+        force_overwrite_grammar_block_ids=body.force_overwrite_grammar_block_ids,
+        archive_grammar_ids=body.archive_grammar_ids,
     )
 
 

@@ -93,6 +93,7 @@ class GrammarItemInput(BaseModel):
     source_content_hash: str | None = None
     block_ids: list[str] = Field(default_factory=list)
     sync_change: SyncChange | None = None
+    force_overwrite: bool = False
 
     @field_validator("jlpt_level", mode="before")
     @classmethod

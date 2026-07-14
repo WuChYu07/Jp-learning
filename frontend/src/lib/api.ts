@@ -194,6 +194,7 @@ export type NotionGrammarItem = {
   notion_block_id?: string;
   source_content_hash?: string;
   sync_change?: "new" | "updated" | "unchanged";
+  force_overwrite?: boolean;
   usages: Array<{
     semantic_concept: string;
     connection_rule: string;
@@ -205,10 +206,18 @@ export type NotionGrammarItem = {
 export type NotionVocabItem = {
   word: string;
   reading?: string;
+  sync_change?: "new" | "updated" | "unchanged";
   definitions: Array<{
     part_of_speech?: string;
     meaning_zh: string;
   }>;
+};
+
+export type NotionOrphanedGrammar = {
+  id: string;
+  grammar_point: string;
+  notion_block_id?: string;
+  notion_page_id?: string;
 };
 
 export type NotionPageSource = {
@@ -240,6 +249,10 @@ export type NotionSyncPreview = {
   grammar_new_count: number;
   grammar_updated_count: number;
   grammar_unchanged_count: number;
+  vocab_new_count: number;
+  vocab_updated_count: number;
+  vocab_unchanged_count: number;
+  orphaned_grammars: NotionOrphanedGrammar[];
   sources: NotionPageSource[];
 };
 
@@ -528,10 +541,25 @@ export const api = {
     page_id: string,
     page_title?: string,
     focus: "vocabulary" | "grammar" | "both" = "both",
+    options?: {
+      force?: boolean;
+      force_overwrite_grammar_block_ids?: string[];
+      archive_grammar_ids?: string[];
+    },
   ) =>
     request<IngestionResponse>("/api/v1/notion/confirm", {
       method: "POST",
-      body: JSON.stringify({ parsed, content_hash, page_id, page_title, focus }),
+      body: JSON.stringify({
+        parsed,
+        content_hash,
+        page_id,
+        page_title,
+        focus,
+        force: options?.force ?? false,
+        force_overwrite_grammar_block_ids:
+          options?.force_overwrite_grammar_block_ids ?? [],
+        archive_grammar_ids: options?.archive_grammar_ids ?? [],
+      }),
     }),
 
   notionStatus: () => request<NotionSyncStatus>("/api/v1/notion/status"),

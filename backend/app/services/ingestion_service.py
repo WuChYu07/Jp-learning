@@ -86,11 +86,14 @@ class IngestionService:
         source_type: SourceType,
         mime_type: str = "text/plain",
         file_name: str | None = None,
+        *,
+        skip_ingestion_cache: bool = False,
     ) -> IngestionResponse:
         """Save pre-parsed data (from text preview confirm) to DB."""
-        cached = self._find_cached_ingestion(content_hash)
-        if cached:
-            return IngestionResponse.model_validate({**cached, "cached": True})
+        if not skip_ingestion_cache:
+            cached = self._find_cached_ingestion(content_hash)
+            if cached:
+                return IngestionResponse.model_validate({**cached, "cached": True})
 
         ingestion_id = self._create_ingestion_row(
             content_hash=content_hash,
@@ -456,9 +459,11 @@ class IngestionService:
 
             if existing:
                 grammar_id = UUID(existing["id"])
+                meta_only = bool(existing.get("manual_edited_at")) or (
+                    item.sync_change == "updated" and not item.force_overwrite
+                )
 
-                # Manual edits: refresh images/hash metadata only; keep user content.
-                if existing.get("manual_edited_at"):
+                if meta_only:
                     self.db.table("grammars").update(
                         {
                             "image_urls": item.image_urls or [],
@@ -497,7 +502,10 @@ class IngestionService:
                 if fallback.data.get("sync_status") == "archived":
                     continue
                 grammar_id = UUID(fallback.data["id"])
-                if fallback.data.get("manual_edited_at"):
+                meta_only = bool(fallback.data.get("manual_edited_at")) or (
+                    item.sync_change == "updated" and not item.force_overwrite
+                )
+                if meta_only:
                     self.db.table("grammars").update(
                         {
                             "image_urls": item.image_urls or [],

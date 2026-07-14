@@ -49,6 +49,34 @@ def grammar_source_hash(
     block_ids: list[str],
 ) -> str:
     """Hash of parsed Notion slice — detects content changes independent of title."""
+
+    def _example_blob(examples: object) -> str:
+        parts: list[str] = []
+        for ex in examples or []:
+            if hasattr(ex, "japanese"):
+                parts.append(
+                    "|".join(
+                        [
+                            getattr(ex, "japanese", "") or "",
+                            getattr(ex, "reading", "") or "",
+                            getattr(ex, "chinese", "") or "",
+                            getattr(ex, "english", "") or "",
+                        ]
+                    )
+                )
+            elif isinstance(ex, dict):
+                parts.append(
+                    "|".join(
+                        [
+                            ex.get("japanese", "") or "",
+                            ex.get("reading", "") or "",
+                            ex.get("chinese", "") or "",
+                            ex.get("english", "") or "",
+                        ]
+                    )
+                )
+        return ";".join(parts)
+
     usage_parts: list[str] = []
     for usage in usages:
         if hasattr(usage, "semantic_concept"):
@@ -58,7 +86,7 @@ def grammar_source_hash(
                         getattr(usage, "semantic_concept", "") or "",
                         getattr(usage, "connection_rule", "") or "",
                         getattr(usage, "meaning_zh", "") or "",
-                        str(len(getattr(usage, "example_sentences", []) or [])),
+                        _example_blob(getattr(usage, "example_sentences", None)),
                     ]
                 )
             )
@@ -69,7 +97,7 @@ def grammar_source_hash(
                         usage.get("semantic_concept", "") or "",
                         usage.get("connection_rule", "") or "",
                         usage.get("meaning_zh", "") or "",
-                        str(len(usage.get("example_sentences") or [])),
+                        _example_blob(usage.get("example_sentences")),
                     ]
                 )
             )
@@ -80,6 +108,71 @@ def grammar_source_hash(
             ",".join(sorted(set(block_ids))),
             ",".join(sorted(set(image_urls))),
             "||".join(usage_parts),
+        ]
+    )
+    return sha256_hex(payload.encode("utf-8"))
+
+
+def vocab_source_hash(
+    *,
+    word: str,
+    reading: str | None,
+    definitions: list[object],
+) -> str:
+    """Hash Notion vocab slice for change detection (meaning, notes, example text)."""
+
+    def _example_blob(examples: object) -> str:
+        parts: list[str] = []
+        for ex in examples or []:
+            if hasattr(ex, "japanese"):
+                parts.append(
+                    "|".join(
+                        [
+                            getattr(ex, "japanese", "") or "",
+                            getattr(ex, "reading", "") or "",
+                            getattr(ex, "chinese", "") or "",
+                        ]
+                    )
+                )
+            elif isinstance(ex, dict):
+                parts.append(
+                    "|".join(
+                        [
+                            ex.get("japanese", "") or "",
+                            ex.get("reading", "") or "",
+                            ex.get("chinese", "") or "",
+                        ]
+                    )
+                )
+        return ";".join(parts)
+
+    def_parts: list[str] = []
+    for definition in definitions:
+        if hasattr(definition, "meaning_zh"):
+            def_parts.append(
+                "|".join(
+                    [
+                        getattr(definition, "meaning_zh", "") or "",
+                        getattr(definition, "notes_zh", "") or "",
+                        _example_blob(getattr(definition, "example_sentences", None)),
+                    ]
+                )
+            )
+        elif isinstance(definition, dict):
+            def_parts.append(
+                "|".join(
+                    [
+                        definition.get("meaning_zh", "") or "",
+                        definition.get("notes_zh", "") or "",
+                        _example_blob(definition.get("example_sentences")),
+                    ]
+                )
+            )
+
+    payload = "\n".join(
+        [
+            f"{word.strip()}|{(reading or '').strip()}".lower(),
+            "||".join(def_parts),
         ]
     )
     return sha256_hex(payload.encode("utf-8"))
