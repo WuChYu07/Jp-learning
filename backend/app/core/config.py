@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     # Gemini
     GEMINI_API_KEY: str
+    # Optional comma-separated backup keys (2–3 total including GEMINI_API_KEY)
+    GEMINI_API_KEYS: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
@@ -78,6 +80,16 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def gemini_api_key_list(self) -> list[str]:
+        """Primary + backup Gemini keys, de-duplicated, order preserved."""
+        keys: list[str] = []
+        for raw in [self.GEMINI_API_KEY, *self.GEMINI_API_KEYS.split(",")]:
+            key = raw.strip()
+            if key and key not in keys:
+                keys.append(key)
+        return keys
 
 
 @lru_cache

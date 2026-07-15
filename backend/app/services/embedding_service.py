@@ -7,22 +7,14 @@ import logging
 import math
 import re
 
-from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.core.http_client import create_sync_client
+from app.services.gemini_client import run_with_key_failover
 
 logger = logging.getLogger(__name__)
 
 _MAX_CHARS = 1800
-
-
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
 
 
 def content_text_hash(text: str) -> str:
@@ -114,26 +106,29 @@ class EmbeddingService:
         if not text:
             raise ValueError("Cannot embed empty text")
 
-        client = _get_client()
         dim = settings.EMBEDDING_DIM
-        try:
-            response = client.models.embed_content(
-                model=settings.GEMINI_EMBEDDING_MODEL,
-                contents=text,
-                config=types.EmbedContentConfig(
-                    task_type="SEMANTIC_SIMILARITY",
-                    output_dimensionality=dim,
-                ),
-            )
-        except Exception:
-            # Fallback for older SDK / model param shapes
-            response = client.models.embed_content(
-                model=settings.GEMINI_EMBEDDING_MODEL,
-                contents=text,
-                config=types.EmbedContentConfig(
-                    task_type="SEMANTIC_SIMILARITY",
-                ),
-            )
+
+        def _embed(client):
+            try:
+                return client.models.embed_content(
+                    model=settings.GEMINI_EMBEDDING_MODEL,
+                    contents=text,
+                    config=types.EmbedContentConfig(
+                        task_type="SEMANTIC_SIMILARITY",
+                        output_dimensionality=dim,
+                    ),
+                )
+            except Exception:
+                # Fallback for older SDK / model param shapes
+                return client.models.embed_content(
+                    model=settings.GEMINI_EMBEDDING_MODEL,
+                    contents=text,
+                    config=types.EmbedContentConfig(
+                        task_type="SEMANTIC_SIMILARITY",
+                    ),
+                )
+
+        response = run_with_key_failover(_embed)
 
         values: list[float] | None = None
         embeddings = getattr(response, "embeddings", None)

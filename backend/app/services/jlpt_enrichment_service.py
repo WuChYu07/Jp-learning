@@ -7,13 +7,11 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.core.config import settings
-from app.core.http_client import create_sync_client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.common import JlptLevel
 from app.models.schemas.grammar import coerce_grammar_jlpt
@@ -23,6 +21,7 @@ from app.models.schemas.jlpt import (
     JlptPreviewResponse,
     JlptSuggestionItem,
 )
+from app.services.gemini_client import is_quota_error, run_with_key_failover
 
 _VOCAB_LEVELS = {level.value for level in JlptLevel if level != JlptLevel.UNKNOWN}
 
@@ -51,13 +50,6 @@ class _AiBatch(BaseModel):
     items: list[_AiItem] = Field(default_factory=list)
 
 
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
-
-
 def _normalize_json_payload(raw: str | None) -> str:
     if not raw:
         raise ValueError("Gemini returned an empty response")
@@ -76,11 +68,13 @@ def _parse_batch(raw: str | None) -> _AiBatch:
 
 
 def _raise_gemini_http_error(exc: Exception) -> None:
-    message = str(exc)
-    if "429" in message or "RESOURCE_EXHAUSTED" in message:
+    if is_quota_error(exc):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Gemini API 額度已用完，請稍後再試或更換 API key。",
+            detail=(
+                "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                "請設定 GEMINI_API_KEYS 備援 key 後再試。"
+            ),
         ) from exc
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
@@ -321,16 +315,17 @@ class JlptEnrichmentService:
         lines = "\n".join(c["prompt_line"] for c in candidates)
         prompt = f"{_PROMPT}\n\n## 項目\n{lines}\n"
         try:
-            client = _get_client()
-            response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=_AiBatch,
-                    temperature=0.1,
-                    max_output_tokens=8192,
-                ),
+            response = run_with_key_failover(
+                lambda client: client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=_AiBatch,
+                        temperature=0.1,
+                        max_output_tokens=8192,
+                    ),
+                )
             )
             parsed = getattr(response, "parsed", None)
             if isinstance(parsed, _AiBatch):

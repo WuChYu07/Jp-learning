@@ -2,14 +2,13 @@ import json
 from typing import Literal
 
 from fastapi import HTTPException, status
-from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.core.http_client import create_sync_client
 from app.models.schemas.ingestion import IngestionParseResult
-from app.services.hash_service import extract_pdf_text
 from app.services import local_pdf_parser
+from app.services.gemini_client import is_quota_error, run_with_key_failover
+from app.services.hash_service import extract_pdf_text
 
 IngestionFocus = Literal["vocabulary", "grammar", "both"]
 
@@ -46,13 +45,6 @@ If nothing is found for a category, return an empty array for it.
 _CHUNK_CHAR_LIMIT = 12_000
 
 
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
-
-
 def _chunk_text(text: str, max_chars: int = _CHUNK_CHAR_LIMIT) -> list[str]:
     lines = text.splitlines()
     chunks: list[str] = []
@@ -73,19 +65,29 @@ def _chunk_text(text: str, max_chars: int = _CHUNK_CHAR_LIMIT) -> list[str]:
     return chunks or [text]
 
 
-def _parse_once(client: genai.Client, contents: list, focus: IngestionFocus) -> IngestionParseResult:
+def _parse_once(contents: list, focus: IngestionFocus) -> IngestionParseResult:
     try:
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=IngestionParseResult,
-                temperature=0.2,
-                max_output_tokens=8192,
-            ),
+        response = run_with_key_failover(
+            lambda client: client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=IngestionParseResult,
+                    temperature=0.2,
+                    max_output_tokens=8192,
+                ),
+            )
         )
     except Exception as exc:
+        if is_quota_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                    "請在 .env / Render 設定 GEMINI_API_KEYS 備援 key。"
+                ),
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Gemini API error: {exc}",
@@ -151,12 +153,10 @@ def parse_content(
 
 
 def _parse_text_with_gemini(text: str, focus: IngestionFocus) -> IngestionParseResult:
-    client = _get_client()
     prompt = _FOCUS_PROMPTS[focus]
     chunks = _chunk_text(text)
     results = [
         _parse_once(
-            client,
             [f"Study notes (part {i + 1}/{len(chunks)}):\n\n{chunk}", prompt],
             focus,
         )
@@ -184,7 +184,6 @@ def _parse_with_gemini(
     mime_type: str,
     focus: IngestionFocus,
 ) -> IngestionParseResult:
-    client = _get_client()
     prompt = _FOCUS_PROMPTS[focus]
 
     if mime_type == "application/pdf":
@@ -193,7 +192,6 @@ def _parse_with_gemini(
             chunks = _chunk_text(text)
             results = [
                 _parse_once(
-                    client,
                     [f"Study material (part {index + 1}/{len(chunks)}):\n\n{chunk}", prompt],
                     focus,
                 )
@@ -202,4 +200,4 @@ def _parse_with_gemini(
             return _merge_results(results)
 
     file_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
-    return _parse_once(client, [file_part, prompt], focus)
+    return _parse_once([file_part, prompt], focus)

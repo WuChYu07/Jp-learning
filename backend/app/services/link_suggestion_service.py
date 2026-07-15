@@ -7,11 +7,9 @@ import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.core.http_client import create_sync_client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.links import (
     LinkEntityType,
@@ -19,6 +17,7 @@ from app.models.schemas.links import (
     SuggestedLink,
     SuggestLinksResponse,
 )
+from app.services.gemini_client import is_quota_error, run_with_key_failover
 from app.services.link_service import link_service
 
 _SUGGEST_PROMPT = """你是日文文法老師。根據「中心文法」與「候選文法列表」，建議語意關聯。
@@ -43,13 +42,6 @@ _SUGGEST_PROMPT = """你是日文文法老師。根據「中心文法」與「�
   prerequisite：應先學會的基礎；derived：由此延伸的句型。
 - 全部使用繁體中文。不要 markdown 圍欄。
 """
-
-
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
 
 
 def _parse_json(text: str) -> dict:
@@ -153,18 +145,27 @@ class LinkSuggestionService:
         )
 
         try:
-            client = _get_client()
-            response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                    response_mime_type="application/json",
-                ),
+            response = run_with_key_failover(
+                lambda client: client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[prompt],
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                        response_mime_type="application/json",
+                    ),
+                )
             )
             raw = response.text or "{}"
             data = _parse_json(raw)
         except Exception as exc:
+            if is_quota_error(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                        "請設定 GEMINI_API_KEYS 備援 key 後再試。"
+                    ),
+                ) from exc
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"AI suggestion failed: {exc}",

@@ -6,17 +6,16 @@ import json
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.core.http_client import create_sync_client
 from app.models.schemas.common import ExampleSentence, JlptLevel, PartOfSpeech
 from app.models.schemas.vocab import (
     VocabEnrichmentOutput,
     VocabularyDefinitionOut,
     VocabularyOut,
 )
+from app.services.gemini_client import is_quota_error, run_with_key_failover
 from app.services.text_sanitize import clean_text
 from app.services.vocab_service import vocab_service
 
@@ -48,13 +47,6 @@ _ENRICH_PROMPT = """你是一位日文單字老師，請為學習者補齊筆記
 """
 
 
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
-
-
 def _normalize_json_payload(raw: str | None) -> str:
     if not raw:
         raise ValueError("Gemini returned an empty response")
@@ -73,20 +65,21 @@ def _parse_enrichment_payload(raw: str | None) -> VocabEnrichmentOutput:
 
 
 def _generate_enrichment(
-    client: genai.Client,
     contents: list[object],
     *,
     max_output_tokens: int,
 ) -> VocabEnrichmentOutput:
-    response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=VocabEnrichmentOutput,
-            temperature=0.2,
-            max_output_tokens=max_output_tokens,
-        ),
+    response = run_with_key_failover(
+        lambda client: client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=VocabEnrichmentOutput,
+                temperature=0.2,
+                max_output_tokens=max_output_tokens,
+            ),
+        )
     )
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, VocabEnrichmentOutput):
@@ -98,11 +91,12 @@ def _generate_enrichment(
 
 def _raise_gemini_http_error(exc: Exception) -> None:
     message = str(exc)
-    if "429" in message or "RESOURCE_EXHAUSTED" in message:
+    if is_quota_error(exc):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "Gemini API 額度已用完。請到 Google AI Studio 充值或更換 API key，"
+                "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                "請在 .env / Render 新增 GEMINI_API_KEYS 備援 key，"
                 "之後再按「AI 補充」。"
             ),
         ) from exc
@@ -164,14 +158,13 @@ class VocabEnrichmentService:
             _ENRICH_PROMPT,
         ]
 
-        client = _get_client()
         try:
             enriched: VocabEnrichmentOutput | None = None
             last_error: Exception | None = None
             for max_tokens in (8192, 12288):
                 try:
                     enriched = _generate_enrichment(
-                        client, contents, max_output_tokens=max_tokens
+                        contents, max_output_tokens=max_tokens
                     )
                     break
                 except ValueError as exc:

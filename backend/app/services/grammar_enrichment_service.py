@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from google import genai
 from google.genai import types
 
 from app.core.config import settings
 from app.core.http_client import create_sync_client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.grammar import GrammarEnrichmentOutput, GrammarOut
+from app.services.gemini_client import is_quota_error, run_with_key_failover
 from app.services.grammar_service import grammar_service
 from app.services.text_sanitize import clean_text
 
@@ -100,13 +100,6 @@ _EXPLAIN_PROMPT = """你是一位日文文法老師，請為學習者撰寫完�
 """
 
 
-def _get_client() -> genai.Client:
-    return genai.Client(
-        api_key=settings.GEMINI_API_KEY,
-        http_options=types.HttpOptions(httpx_client=create_sync_client()),
-    )
-
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -135,20 +128,21 @@ def _parse_enrichment_payload(raw: str | None) -> GrammarEnrichmentOutput:
 
 
 def _generate_enrichment(
-    client: genai.Client,
     contents: list[object],
     *,
     max_output_tokens: int,
 ) -> GrammarEnrichmentOutput:
-    response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=GrammarEnrichmentOutput,
-            temperature=0.1,
-            max_output_tokens=max_output_tokens,
-        ),
+    response = run_with_key_failover(
+        lambda client: client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=GrammarEnrichmentOutput,
+                temperature=0.1,
+                max_output_tokens=max_output_tokens,
+            ),
+        )
     )
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, GrammarEnrichmentOutput):
@@ -160,11 +154,12 @@ def _generate_enrichment(
 
 def _raise_gemini_http_error(exc: Exception, *, action_label: str) -> None:
     message = str(exc)
-    if "429" in message or "RESOURCE_EXHAUSTED" in message:
+    if is_quota_error(exc):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "Gemini API 額度已用完。請到 Google AI Studio 充值或更換 API key，"
+                "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                "請在 .env / Render 新增 GEMINI_API_KEYS 備援 key，"
                 f"之後再按「{action_label}」。"
             ),
         ) from exc
@@ -193,7 +188,6 @@ class GrammarEnrichmentService:
             )
 
         existing_usages = self._load_existing_usages(grammar_id)
-        client = _get_client()
         image_parts: list[types.Part] = []
         http = create_sync_client(timeout=90.0)
         max_images = min(len(image_urls), 8)
@@ -215,7 +209,7 @@ class GrammarEnrichmentService:
 
         try:
             token_limits = (8192, 12288) if max_images > 4 else (8192,)
-            item = self._run_generation(client, contents, token_limits)
+            item = self._run_generation(contents, token_limits)
         except Exception as exc:
             _raise_gemini_http_error(exc, action_label="從圖片補全")
 
@@ -244,9 +238,8 @@ class GrammarEnrichmentService:
             _EXPLAIN_PROMPT,
         ]
 
-        client = _get_client()
         try:
-            item = self._run_generation(client, contents, (8192,))
+            item = self._run_generation(contents, (8192,))
         except Exception as exc:
             _raise_gemini_http_error(exc, action_label="AI 解釋補全")
 
@@ -333,14 +326,13 @@ class GrammarEnrichmentService:
 
     def _run_generation(
         self,
-        client: genai.Client,
         contents: list[object],
         token_limits: tuple[int, ...],
     ) -> GrammarEnrichmentOutput:
         last_error: Exception | None = None
         for max_tokens in token_limits:
             try:
-                return _generate_enrichment(client, contents, max_output_tokens=max_tokens)
+                return _generate_enrichment(contents, max_output_tokens=max_tokens)
             except ValueError as exc:
                 last_error = exc
                 if max_tokens != token_limits[-1]:

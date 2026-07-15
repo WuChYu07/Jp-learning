@@ -6,14 +6,13 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_effective_user_id
 from app.core.config import settings
-from app.core.http_client import create_sync_client
 from app.models.schemas.vocab import ExamAttemptCreate, ExamAttemptOut
+from app.services.gemini_client import is_quota_error, run_with_key_failover
 from app.services.quiz_service import quiz_service
 
 router = APIRouter()
@@ -176,20 +175,26 @@ Student's Japanese translation: {body.user_answer}"""
         user_prompt += f"\nTarget vocabulary: {body.hint_word}"
 
     try:
-        client = genai.Client(
-            api_key=settings.GEMINI_API_KEY,
-            http_options=types.HttpOptions(httpx_client=create_sync_client()),
-        )
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=[_GRADE_PROMPT, user_prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.3,
-                max_output_tokens=1024,
-            ),
+        response = run_with_key_failover(
+            lambda client: client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=[_GRADE_PROMPT, user_prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                    max_output_tokens=1024,
+                ),
+            )
         )
     except Exception as exc:
+        if is_quota_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Gemini API 額度已用完（所有 key 皆無法使用）。"
+                    "請設定 GEMINI_API_KEYS 備援 key 後再試。"
+                ),
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Gemini API error: {exc}",

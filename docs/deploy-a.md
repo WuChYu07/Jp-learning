@@ -48,7 +48,8 @@
 | `SUPABASE_URL` | 同本機 |
 | `SUPABASE_ANON_KEY` | 同本機 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 同本機（只給後端） |
-| `GEMINI_API_KEY` | 同本機 |
+| `GEMINI_API_KEY` | 同本機（主 key） |
+| `GEMINI_API_KEYS` | 可選：備援 key，逗號分隔（額度用完自動切換） |
 | `GEMINI_MODEL` | 例如 `gemini-2.5-flash` |
 | `AUTH_ENABLED` | `false`（單人） |
 | `SSL_VERIFY` | `true` |
