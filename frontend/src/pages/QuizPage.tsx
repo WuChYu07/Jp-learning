@@ -6,7 +6,7 @@ import {
   TranslationPrompt,
 } from "../lib/api";
 
-type QuizMode = "4choice" | "translation";
+type QuizMode = "4choice" | "grammar" | "translation";
 
 export default function QuizPage() {
   const [mode, setMode] = useState<QuizMode>("4choice");
@@ -16,12 +16,18 @@ export default function QuizPage() {
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold">
           測驗
         </h1>
-        <div className="flex rounded-full bg-stone-100 p-1">
+        <div className="flex flex-wrap rounded-full bg-stone-100 p-1">
           <TabButton
             active={mode === "4choice"}
             onClick={() => setMode("4choice")}
           >
-            四選一
+            單字四選一
+          </TabButton>
+          <TabButton
+            active={mode === "grammar"}
+            onClick={() => setMode("grammar")}
+          >
+            文法四選一
           </TabButton>
           <TabButton
             active={mode === "translation"}
@@ -32,7 +38,9 @@ export default function QuizPage() {
         </div>
       </div>
 
-      {mode === "4choice" ? <FourChoiceQuiz /> : <TranslationQuiz />}
+      {mode === "4choice" && <FourChoiceQuiz />}
+      {mode === "grammar" && <GrammarFourChoiceQuiz />}
+      {mode === "translation" && <TranslationQuiz />}
     </div>
   );
 }
@@ -66,6 +74,38 @@ function TabButton({
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FourChoiceQuiz() {
+  return (
+    <GenericFourChoiceQuiz
+      title="單字四選一"
+      subject="vocab"
+      loadQuestions={() => api.quiz4Choice(10).then((r) => r.questions)}
+      emptyText="資料庫單字不足，無法出題"
+    />
+  );
+}
+
+function GrammarFourChoiceQuiz() {
+  return (
+    <GenericFourChoiceQuiz
+      title="文法四選一"
+      subject="grammar"
+      loadQuestions={() => api.quizGrammar4Choice(10).then((r) => r.questions)}
+      emptyText="資料庫文法不足，無法出題"
+    />
+  );
+}
+
+function GenericFourChoiceQuiz({
+  title,
+  subject,
+  loadQuestions,
+  emptyText,
+}: {
+  title: string;
+  subject: "vocab" | "grammar";
+  loadQuestions: () => Promise<FourChoiceQuestion[]>;
+  emptyText: string;
+}) {
   const [questions, setQuestions] = useState<FourChoiceQuestion[]>([]);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -85,12 +125,11 @@ function FourChoiceQuiz() {
     setSelected(null);
     setRevealed(false);
     setSaved(false);
-    api
-      .quiz4Choice(10)
-      .then((res) => setQuestions(res.questions))
+    loadQuestions()
+      .then(setQuestions)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadQuestions]);
 
   useEffect(() => {
     load();
@@ -101,7 +140,7 @@ function FourChoiceQuiz() {
     setSaved(true);
     void api
       .submitQuizResult({
-        subject: "vocab",
+        subject,
         mode: "4choice",
         correct_count: score,
         total_count: questions.length,
@@ -109,11 +148,11 @@ function FourChoiceQuiz() {
       .catch(() => {
         /* non-blocking */
       });
-  }, [finished, saved, score, questions.length]);
+  }, [finished, saved, score, questions.length, subject]);
 
   if (loading) return <LoadingCard />;
   if (error) return <ErrorCard message={error} />;
-  if (questions.length === 0) return <EmptyCard text="資料庫單字不足，無法出題" />;
+  if (questions.length === 0) return <EmptyCard text={emptyText} />;
 
   if (finished) {
     const pct = Math.round((score / questions.length) * 100);
@@ -122,7 +161,7 @@ function FourChoiceQuiz() {
         <div className="rounded-3xl bg-white p-8 text-center shadow-lg ring-1 ring-orange-100">
           <p className="text-4xl">{pct >= 80 ? "🎉" : pct >= 50 ? "💪" : "📖"}</p>
           <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--color-primary-dark)]">
-            測驗完成！
+            {title}完成！
           </h2>
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div>
@@ -198,7 +237,11 @@ function FourChoiceQuiz() {
       {/* Question card */}
       <div className="rounded-3xl bg-white p-8 text-center shadow-lg ring-1 ring-orange-100">
         <span className="inline-block rounded-full bg-orange-50 px-3 py-0.5 text-xs font-semibold text-orange-700">
-          {q.mode === "reading" ? "讀音" : "意思"}
+          {q.mode === "reading"
+            ? "讀音"
+            : q.mode === "point"
+              ? "文法"
+              : "意思"}
         </span>
         <p className="kanji-display mt-6 text-6xl text-[var(--color-ink)]">
           {q.word}

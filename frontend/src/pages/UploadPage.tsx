@@ -1,8 +1,15 @@
 import { useRef, useState } from "react";
-import { api, IngestionResponse, NotionSyncPreview, TextParsePreview } from "../lib/api";
+import {
+  api,
+  IngestionResponse,
+  JlptSuggestion,
+  NotionSyncPreview,
+  TextParsePreview,
+} from "../lib/api";
 
-type UploadTab = "csv" | "text" | "pdf" | "notion";
+type UploadTab = "csv" | "text" | "pdf" | "notion" | "jlpt";
 type FocusType = "vocabulary" | "grammar" | "both";
+type JlptEntityFilter = "vocab" | "grammar" | "both";
 
 export default function UploadPage() {
   const [tab, setTab] = useState<UploadTab>("csv");
@@ -14,18 +21,19 @@ export default function UploadPage() {
       </h1>
 
       {/* Tab bar */}
-      <div className="flex rounded-full bg-stone-100 p-1">
+      <div className="flex flex-wrap rounded-2xl bg-stone-100 p-1">
         {([
-          { id: "csv" as const, label: "CSV 檔案" },
-          { id: "text" as const, label: "文字貼上" },
-          { id: "pdf" as const, label: "PDF / 圖片" },
+          { id: "csv" as const, label: "CSV" },
+          { id: "text" as const, label: "文字" },
+          { id: "pdf" as const, label: "PDF" },
           { id: "notion" as const, label: "Notion" },
+          { id: "jlpt" as const, label: "JLPT" },
         ]).map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+            className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
               tab === t.id
                 ? "bg-white text-[var(--color-primary)] shadow-sm"
                 : "text-stone-500 hover:text-stone-800"
@@ -40,6 +48,214 @@ export default function UploadPage() {
       {tab === "text" && <TextPaste />}
       {tab === "pdf" && <PdfUpload />}
       {tab === "notion" && <NotionSync />}
+      {tab === "jlpt" && <JlptBatchFill />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// JLPT batch fill (preview → confirm → apply)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function JlptBatchFill() {
+  const [entity, setEntity] = useState<JlptEntityFilter>("both");
+  const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [items, setItems] = useState<JlptSuggestion[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [updated, setUpdated] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  const keyOf = (item: JlptSuggestion) => `${item.entity}:${item.id}`;
+
+  async function handlePreview() {
+    if (loading) return;
+    setLoading(true);
+    setError("");
+    setUpdated(null);
+    try {
+      const res = await api.jlptPreview(entity, 20);
+      setItems(res.items);
+      setRemaining(res.remaining_unknown);
+      setSelected(new Set(res.items.map(keyOf)));
+      if (res.items.length === 0) {
+        setError("目前沒有 unknown 項目可建議（或 AI 無法判斷）。");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "JLPT 預覽失敗");
+      setItems([]);
+      setSelected(new Set());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleApply() {
+    if (applying || selected.size === 0) return;
+    setApplying(true);
+    setError("");
+    try {
+      const payload = items
+        .filter((item) => selected.has(keyOf(item)))
+        .map((item) => ({
+          entity: item.entity,
+          id: item.id,
+          jlpt_level: item.suggested_jlpt,
+        }));
+      const res = await api.jlptApply(payload);
+      setUpdated(res.updated);
+      setItems((prev) => prev.filter((item) => !selected.has(keyOf(item))));
+      setSelected(new Set());
+      if (remaining != null) {
+        setRemaining(Math.max(0, remaining - res.updated));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "套用失敗");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function toggle(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAll(on: boolean) {
+    setSelected(on ? new Set(items.map(keyOf)) : new Set());
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-stone-600">
+        針對 <code className="text-xs">jlpt_level = unknown</code>{" "}
+        的單字／文法批次產生建議，勾選後才寫入（不會覆寫已有等級）。
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { id: "both" as const, label: "兩者" },
+            { id: "vocab" as const, label: "單字" },
+            { id: "grammar" as const, label: "文法" },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => setEntity(opt.id)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              entity === opt.id
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void handlePreview()}
+        disabled={loading}
+        className="w-full rounded-full bg-[var(--color-primary)] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-60"
+      >
+        {loading ? "產生建議中…" : "產生 JLPT 建議（最多 20）"}
+      </button>
+
+      {remaining != null && (
+        <p className="text-xs text-stone-500">
+          目前尚有約 {remaining} 筆 unknown（可連續跑多輪）。
+        </p>
+      )}
+
+      {error && (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
+
+      {updated != null && (
+        <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          已寫入 {updated} 筆等級。
+        </p>
+      )}
+
+      {items.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-semibold text-stone-700">
+              建議 {items.length} 筆（已選 {selected.size}）
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => toggleAll(true)}
+                className="text-[var(--color-primary)]"
+              >
+                全選
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleAll(false)}
+                className="text-stone-500"
+              >
+                清除
+              </button>
+            </div>
+          </div>
+
+          <ul className="max-h-96 space-y-2 overflow-y-auto">
+            {items.map((item) => {
+              const key = keyOf(item);
+              const checked = selected.has(key);
+              return (
+                <li key={key}>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-stone-100">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(key)}
+                      className="mt-1 accent-[var(--color-primary)]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-stone-800">
+                          {item.label}
+                        </span>
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-stone-500">
+                          {item.entity === "vocab" ? "單字" : "文法"}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                          {item.suggested_jlpt}
+                        </span>
+                      </span>
+                      {item.detail && (
+                        <span className="mt-0.5 block truncate text-xs text-stone-500">
+                          {item.detail}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+
+          <button
+            type="button"
+            onClick={() => void handleApply()}
+            disabled={applying || selected.size === 0}
+            className="w-full rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {applying ? "寫入中…" : `套用已選 ${selected.size} 筆`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

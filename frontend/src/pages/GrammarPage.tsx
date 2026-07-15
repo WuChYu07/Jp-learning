@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
 import GrammarRelationSection from "../components/GrammarRelationSection";
@@ -279,13 +279,21 @@ export default function GrammarPage() {
     <div className="space-y-6">
       <div className={`flex flex-wrap items-center justify-between gap-3 ${selectedId ? "hidden md:flex" : ""}`}>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold">文法中心</h1>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white"
-        >
-          ＋ 新增文法
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/grammar/review"
+            className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white"
+          >
+            開始文法卡 →
+          </Link>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="rounded-full bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-700"
+          >
+            ＋ 新增文法
+          </button>
+        </div>
       </div>
       {error && <p className="text-red-600">{error}</p>}
 

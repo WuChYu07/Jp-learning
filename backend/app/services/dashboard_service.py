@@ -14,6 +14,7 @@ class DashboardStats(BaseModel):
     vocab_total: int
     grammar_total: int
     vocab_due_count: int
+    grammar_due_count: int = 0
     streak_days: int
     daily_goal: int = 10
     review_points: int = 0
@@ -33,6 +34,7 @@ class DashboardService:
         grammar_total = self.db.table("grammars").select("id", count="exact").limit(1).execute().count or 0
 
         vocab_due = 0
+        grammar_due = 0
         streak = 0
         review_points = 0
         review_score_avg = 0.0
@@ -68,6 +70,24 @@ class DashboardService:
                     1,
                 )
 
+            g_due = (
+                self.db.table("user_grammar_progress")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .lte("next_review_date", now_iso)
+                .limit(1)
+                .execute()
+            )
+            grammar_due = g_due.count or 0
+            g_progress = (
+                self.db.table("user_grammar_progress")
+                .select("grammar_id")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            g_seen = len(g_progress.data or [])
+            grammar_due += max(0, min(grammar_total - g_seen, 10))
+
             profile = (
                 self.db.table("users")
                 .select("streak_days, review_points")
@@ -83,11 +103,13 @@ class DashboardService:
             exam_grammar_avg, exam_grammar_count = self._exam_avg(user_id, "grammar")
         else:
             vocab_due = vocab_total
+            grammar_due = grammar_total
 
         return DashboardStats(
             vocab_total=vocab_total,
             grammar_total=grammar_total,
             vocab_due_count=vocab_due,
+            grammar_due_count=grammar_due,
             streak_days=streak,
             review_points=review_points,
             review_score_avg=review_score_avg,

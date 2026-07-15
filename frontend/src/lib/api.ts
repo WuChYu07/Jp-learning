@@ -274,6 +274,7 @@ export type DashboardStats = {
   vocab_total: number;
   grammar_total: number;
   vocab_due_count: number;
+  grammar_due_count: number;
   streak_days: number;
   daily_goal: number;
   review_points: number;
@@ -282,6 +283,27 @@ export type DashboardStats = {
   exam_grammar_avg: number | null;
   exam_vocab_count: number;
   exam_grammar_count: number;
+};
+
+export type GrammarReviewBatchResponse = {
+  items: Grammar[];
+  has_more: boolean;
+  next_offset: number;
+  total: number;
+};
+
+export type JlptSuggestion = {
+  entity: "vocab" | "grammar";
+  id: string;
+  label: string;
+  detail?: string;
+  current: string;
+  suggested_jlpt: string;
+};
+
+export type JlptPreviewResponse = {
+  items: JlptSuggestion[];
+  remaining_unknown: number;
 };
 
 // ── Knowledge graph ──
@@ -442,6 +464,22 @@ export const api = {
       `/api/v1/grammar${qs ? `?${qs}` : ""}`,
     );
   },
+  dueGrammar: (limit = 10, offset = 0) =>
+    request<GrammarReviewBatchResponse>(
+      `/api/v1/grammar/review/due?limit=${limit}&offset=${offset}`,
+    ),
+  submitGrammarReview: (grammar_id: string, rating: string) =>
+    request<{
+      next_review_date: string;
+      persisted?: boolean;
+      review_score?: number;
+      review_points?: number;
+      score_delta?: number;
+      points_delta?: number;
+    }>("/api/v1/grammar/review", {
+      method: "POST",
+      body: JSON.stringify({ grammar_id, rating }),
+    }),
   getGrammar: (id: string) => request<Grammar>(`/api/v1/grammar/${id}`),
   createGrammar: (payload: GrammarWriteInput) =>
     request<Grammar>("/api/v1/grammar", {
@@ -469,10 +507,24 @@ export const api = {
   // ── Quiz ──
   quiz4Choice: (count = 10) =>
     request<QuizBatchResponse>(`/api/v1/quiz/vocab?count=${count}`),
+  quizGrammar4Choice: (count = 10) =>
+    request<QuizBatchResponse>(`/api/v1/quiz/grammar?count=${count}`),
   translationPrompts: (count = 5) =>
     request<TranslationBatchResponse>(
       `/api/v1/quiz/translation/prompts?count=${count}`,
     ),
+  jlptPreview: (entity: "vocab" | "grammar" | "both" = "both", limit = 20) =>
+    request<JlptPreviewResponse>("/api/v1/jlpt/preview", {
+      method: "POST",
+      body: JSON.stringify({ entity, limit }),
+    }),
+  jlptApply: (
+    items: Array<{ entity: "vocab" | "grammar"; id: string; jlpt_level: string }>,
+  ) =>
+    request<{ updated: number }>("/api/v1/jlpt/apply", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
   gradeTranslation: (source_zh: string, user_answer: string, hint_word?: string) =>
     request<TranslationGradeResult>("/api/v1/quiz/translation/grade", {
       method: "POST",

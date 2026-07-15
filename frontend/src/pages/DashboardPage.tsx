@@ -28,8 +28,13 @@ export default function DashboardPage() {
       {stats && (
         <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <StatCard
-            label="待複習"
+            label="單字待複習"
             value={stats.vocab_due_count}
+            accent="text-[var(--color-primary)]"
+          />
+          <StatCard
+            label="文法待複習"
+            value={stats.grammar_due_count ?? 0}
             accent="text-[var(--color-primary)]"
           />
           <StatCard
@@ -40,11 +45,6 @@ export default function DashboardPage() {
           <StatCard
             label="平均熟練度"
             value={Math.round(stats.review_score_avg)}
-            accent="text-emerald-600"
-          />
-          <StatCard
-            label="連續天數"
-            value={stats.streak_days}
             accent="text-emerald-600"
           />
         </section>
@@ -131,6 +131,13 @@ export default function DashboardPage() {
           to="/vocab/review"
           cta="前往單字卡"
           emoji="📇"
+        />
+        <ActionCard
+          title="文法卡"
+          description="複習文法句型：正面句型、背面意思與接續。"
+          to="/grammar/review"
+          cta="開始文法卡"
+          emoji="🧾"
         />
         <ActionCard
           title="單字庫"

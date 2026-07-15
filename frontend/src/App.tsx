@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import GrammarPage from "./pages/GrammarPage";
+import GrammarReviewPage from "./pages/GrammarReviewPage";
 import KnowledgeMapPage from "./pages/KnowledgeMapPage";
 import QuizPage from "./pages/QuizPage";
 import UploadPage from "./pages/UploadPage";
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/vocab" element={<VocabPage />} />
         <Route path="/vocab/review" element={<VocabReviewPage />} />
         <Route path="/grammar" element={<GrammarPage />} />
+        <Route path="/grammar/review" element={<GrammarReviewPage />} />
         <Route path="/map" element={<KnowledgeMapPage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/upload" element={<UploadPage />} />

@@ -1,13 +1,15 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Response, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, Field
 
+from app.api.deps import get_effective_user_id
 from app.models.schemas.common import JlptLevel
 from app.models.schemas.grammar import GrammarOut, GrammarSummary, GrammarWriteInput
 from app.models.schemas.links import LinkEntityType, RelationGraphOut, SuggestLinksResponse
 from app.services.grammar_enrichment_service import grammar_enrichment_service
-from app.services.grammar_service import grammar_service
+from app.services.grammar_service import GrammarReviewBatch, grammar_service
 from app.services.link_service import link_service
 from app.services.link_suggestion_service import link_suggestion_service
 
@@ -19,6 +21,18 @@ class GrammarListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class GrammarReviewBatchResponse(BaseModel):
+    items: list[GrammarOut]
+    has_more: bool
+    next_offset: int
+    total: int
+
+
+class GrammarReviewSubmitRequest(BaseModel):
+    grammar_id: UUID
+    rating: str = Field(description="again | hard | good | easy")
 
 
 @router.get("", response_model=GrammarListResponse)
@@ -34,6 +48,23 @@ def list_grammar(
 @router.post("", response_model=GrammarOut, status_code=status.HTTP_201_CREATED)
 def create_grammar(payload: GrammarWriteInput) -> GrammarOut:
     return grammar_service.create_grammar(payload)
+
+
+@router.get("/review/due", response_model=GrammarReviewBatchResponse)
+def get_due_grammar_reviews(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+    limit: int = Query(default=10, ge=1, le=30),
+    offset: int = Query(default=0, ge=0),
+) -> GrammarReviewBatch:
+    return grammar_service.get_due_reviews(user_id, limit=limit, offset=offset)
+
+
+@router.post("/review")
+def submit_grammar_review(
+    body: GrammarReviewSubmitRequest,
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+) -> dict:
+    return grammar_service.submit_review(user_id, body.grammar_id, body.rating)
 
 
 @router.get("/{grammar_id}", response_model=GrammarOut)

@@ -103,6 +103,113 @@ class QuizService:
 
         return QuizBatch(questions=questions, total_available=len(eligible))
 
+    def generate_grammar_4choice(
+        self, count: int = 10, user_id: str | None = None
+    ) -> QuizBatch:
+        grammars = (
+            self.db.table("grammars")
+            .select("id, grammar_point, jlpt_level")
+            .neq("sync_status", "archived")
+            .execute()
+        ).data or []
+        if not grammars:
+            return QuizBatch(questions=[], total_available=0)
+
+        usage_rows = (
+            self.db.table("grammar_usages")
+            .select("grammar_id, semantic_concept, meaning_zh, sort_order")
+            .order("sort_order")
+            .execute()
+        ).data or []
+        meaning_map: dict[str, str] = {}
+        for u in usage_rows:
+            gid = u["grammar_id"]
+            if gid in meaning_map:
+                continue
+            meaning = (u.get("meaning_zh") or "").strip() or (
+                u.get("semantic_concept") or ""
+            ).strip()
+            if meaning:
+                meaning_map[gid] = meaning
+
+        eligible = [g for g in grammars if meaning_map.get(g["id"])]
+        if len(eligible) < 2:
+            return QuizBatch(questions=[], total_available=len(eligible))
+
+        sample_size = min(count, len(eligible))
+        score_map = (
+            score_service.grammar_score_map_for_user(user_id) if user_id else {}
+        )
+        selected_ids = score_service.weighted_sample_ids(
+            [g["id"] for g in eligible],
+            score_map,
+            count=sample_size,
+        )
+        by_id = {g["id"]: g for g in eligible}
+        selected = [by_id[gid] for gid in selected_ids if gid in by_id]
+
+        questions: list[FourChoiceQuestion] = []
+        for i, grammar in enumerate(selected):
+            mode = "meaning" if i % 2 == 0 else "point"
+            q = self._build_grammar_question(grammar, mode, eligible, meaning_map)
+            questions.append(q)
+
+        return QuizBatch(questions=questions, total_available=len(eligible))
+
+    def _build_grammar_question(
+        self,
+        grammar: dict,
+        mode: str,
+        pool: list[dict],
+        meaning_map: dict[str, str],
+    ) -> FourChoiceQuestion:
+        gid = grammar["id"]
+        if mode == "point":
+            # Show meaning, pick grammar_point
+            prompt = "選出正確的文法"
+            correct_text = grammar["grammar_point"]
+            stem = meaning_map.get(gid, "")
+            distractors_pool = [
+                g["grammar_point"]
+                for g in pool
+                if g["id"] != gid and g.get("grammar_point") != correct_text
+            ]
+            display_word = stem
+            display_reading = grammar.get("jlpt_level")
+        else:
+            prompt = "選出正確的意思"
+            correct_text = meaning_map.get(gid, "")
+            stem = grammar["grammar_point"]
+            distractors_pool = [
+                meaning_map[g["id"]]
+                for g in pool
+                if g["id"] != gid
+                and meaning_map.get(g["id"])
+                and meaning_map[g["id"]] != correct_text
+            ]
+            display_word = stem
+            display_reading = grammar.get("jlpt_level")
+
+        unique_distractors = list(set(distractors_pool))
+        num_distractors = min(3, len(unique_distractors))
+        chosen_distractors = random.sample(unique_distractors, num_distractors)
+        options: list[ChoiceOption] = [ChoiceOption(id="correct", text=correct_text)]
+        for j, d in enumerate(chosen_distractors):
+            options.append(ChoiceOption(id=f"d{j}", text=d))
+        while len(options) < 4:
+            options.append(ChoiceOption(id=f"pad{len(options)}", text="—"))
+        random.shuffle(options)
+        correct_id = next(o.id for o in options if o.text == correct_text)
+        return FourChoiceQuestion(
+            question_id=gid,
+            word=display_word,
+            reading=display_reading,
+            prompt=prompt,
+            mode=mode,
+            options=options,
+            correct_option_id=correct_id,
+        )
+
     def generate_translation_prompts(
         self, count: int = 5, user_id: str | None = None
     ) -> TranslationBatch:

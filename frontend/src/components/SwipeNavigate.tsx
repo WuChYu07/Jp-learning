@@ -9,6 +9,9 @@ import {
 const SWIPE_THRESHOLD = 88;
 const DRAG_START = 12;
 
+const INTERACTIVE_SELECTOR =
+  "button, a, input, textarea, select, label, [role='button'], [contenteditable='true']";
+
 type SwipeNavigateProps = {
   children: ReactNode;
   onSwipeRight: () => void;
@@ -27,59 +30,87 @@ export default function SwipeNavigate({
 }: SwipeNavigateProps) {
   const startX = useRef(0);
   const startY = useRef(0);
+  const activePointerId = useRef<number | null>(null);
   const dragged = useRef(false);
+  const dragXRef = useRef(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const progress = Math.min(Math.abs(dragX) / SWIPE_THRESHOLD, 1);
   const swipeEnabled = !disabled;
 
-  const finishDrag = useCallback(() => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    if (!dragged.current) {
-      setDragX(0);
-      return;
-    }
-    if (dragX >= SWIPE_THRESHOLD) {
-      setDragX(0);
-      dragged.current = false;
-      onSwipeRight();
-      return;
-    }
-    if (dragX <= -SWIPE_THRESHOLD && onSwipeLeft) {
-      setDragX(0);
-      dragged.current = false;
-      onSwipeLeft();
-      return;
-    }
-    setDragX(0);
+  const setOffset = (value: number) => {
+    dragXRef.current = value;
+    setDragX(value);
+  };
+
+  const resetDrag = useCallback(() => {
+    activePointerId.current = null;
     dragged.current = false;
-  }, [dragX, isDragging, onSwipeLeft, onSwipeRight]);
+    dragXRef.current = 0;
+    setIsDragging(false);
+    setDragX(0);
+  }, []);
+
+  const finishDrag = useCallback(
+    (e?: PointerEvent<HTMLDivElement>) => {
+      if (activePointerId.current == null) return;
+      if (e && e.pointerId !== activePointerId.current) return;
+
+      const dx = dragXRef.current;
+      const didDrag = dragged.current;
+      if (e?.currentTarget.hasPointerCapture(activePointerId.current)) {
+        e.currentTarget.releasePointerCapture(activePointerId.current);
+      }
+      resetDrag();
+
+      if (!didDrag) return;
+      if (dx >= SWIPE_THRESHOLD) {
+        onSwipeRight();
+        return;
+      }
+      if (dx <= -SWIPE_THRESHOLD && onSwipeLeft) {
+        onSwipeLeft();
+      }
+    },
+    [onSwipeLeft, onSwipeRight, resetDrag],
+  );
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (!swipeEnabled) return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest(INTERACTIVE_SELECTOR)) return;
+
     startX.current = e.clientX;
     startY.current = e.clientY;
+    activePointerId.current = e.pointerId;
     dragged.current = false;
-    setIsDragging(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(false);
+    setOffset(0);
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !swipeEnabled) return;
+    if (!swipeEnabled || activePointerId.current !== e.pointerId) return;
     const dx = e.clientX - startX.current;
     const dy = e.clientY - startY.current;
-    if (!dragged.current && (Math.abs(dx) > DRAG_START || Math.abs(dy) > DRAG_START)) {
+
+    if (!dragged.current) {
+      if (Math.abs(dx) <= DRAG_START && Math.abs(dy) <= DRAG_START) return;
+      // Vertical scroll — abandon horizontal swipe
       if (Math.abs(dx) < Math.abs(dy)) {
-        // Vertical scroll — abandon horizontal swipe
-        setIsDragging(false);
-        setDragX(0);
+        resetDrag();
         return;
       }
       dragged.current = true;
+      setIsDragging(true);
+      // Capture only after a real horizontal gesture so button clicks still work
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
     }
-    if (dragged.current) setDragX(dx);
+
+    setOffset(dx);
   };
 
   return (

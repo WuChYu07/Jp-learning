@@ -88,6 +88,29 @@ def get_4choice_quiz(
     )
 
 
+@router.get("/grammar", response_model=QuizBatchOut)
+def get_grammar_4choice_quiz(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+    count: int = Query(default=10, ge=1, le=20),
+) -> QuizBatchOut:
+    batch = quiz_service.generate_grammar_4choice(count, user_id=user_id)
+    return QuizBatchOut(
+        questions=[
+            FourChoiceQuestionOut(
+                question_id=q.question_id,
+                word=q.word,
+                reading=q.reading,
+                prompt=q.prompt,
+                mode=q.mode,
+                options=[ChoiceOptionOut(id=o.id, text=o.text) for o in q.options],
+                correct_option_id=q.correct_option_id,
+            )
+            for q in batch.questions
+        ],
+        total_available=batch.total_available,
+    )
+
+
 @router.get("/translation/prompts", response_model=TranslationBatchOut)
 def get_translation_prompts(
     user_id: Annotated[str | None, Depends(get_effective_user_id)],

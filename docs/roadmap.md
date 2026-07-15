@@ -21,9 +21,9 @@
 
 | ID | 項目 | 狀態 | 說明 |
 |----|------|------|------|
-| R1 | JLPT 分級補齊 | pending | 大量 `unknown`，篩選幾乎無用；可批次 AI 或對照 JLPT 詞表 |
+| R1 | JLPT 分級補齊 | done | Upload「JLPT」分頁：preview → 勾選 → apply（vocab + grammar unknown） |
 | R2 | 單字例句／補充覆蓋率 | pending | Notion 重同步 + 缺欄 AI 補充（確認小視窗流程已有） |
-| R3 | 文法複習／測驗 | pending | 文法多半只能「看」；缺 SRS 或填空／翻譯練習 |
+| R3 | 文法複習／測驗 | done | 文法閃卡 SRS + 文法四選一（寫入 exam_attempts subject=grammar） |
 | R4 | SRS 綁定真實使用者 | pending | 複習進度需穩定對應登入帳號，避免 anonymous 漂移 |
 
 ### 中優先 — 資料與品質
@@ -44,8 +44,9 @@
 
 ### 已具備（對照用，勿當待辦）
 
-- 單字庫／單字卡、文法中心、四選一、翻譯測驗、Dashboard
-- Notion／CSV／文字匯入、知識圖譜、語意關聯
+- 單字庫／單字卡、文法中心、單字／文法四選一、翻譯測驗、Dashboard
+- 文法閃卡 SRS（SM-2 + review_score）、文法考試分寫入 exam_attempts
+- Notion／CSV／文字匯入、JLPT unknown 批次建議／確認寫入、知識圖譜、語意關聯
 - 單字／文法手修與 AI 草稿 → 確認小視窗才寫入
 - List API 輕量化（效能 N+1 已處理）
 
