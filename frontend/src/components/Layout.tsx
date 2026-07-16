@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import BackendWakeBanner from "./BackendWakeBanner";
 
 const NAV = [
   { to: "/", label: "Dashboard", end: true },
@@ -56,6 +57,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-stone-800">
+      <BackendWakeBanner />
       <header className="sticky top-0 z-40 border-b border-orange-100/80 bg-[var(--color-bg)]/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">

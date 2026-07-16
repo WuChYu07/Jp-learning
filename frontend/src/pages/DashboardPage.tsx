@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, DashboardStats } from "../lib/api";
+import { api, DashboardStats, formatUserFacingError } from "../lib/api";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -10,7 +10,7 @@ export default function DashboardPage() {
     api
       .dashboardStats()
       .then(setStats)
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) => setError(formatUserFacingError(err)));
   }, []);
 
   return (

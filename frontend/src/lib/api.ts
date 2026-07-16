@@ -1,3 +1,12 @@
+import {
+  ApiWakeError,
+  fetchWithRetry,
+  formatApiError,
+  formatUserFacingError,
+} from "./apiTransport";
+
+export { ApiWakeError, formatUserFacingError };
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export type ExampleSentence = {
@@ -374,18 +383,6 @@ export type ContentLink = ContentLinkCreate & {
   id: string;
 };
 
-function formatApiError(body: string, statusText: string): string {
-  try {
-    const parsed = JSON.parse(body) as { detail?: string };
-    if (typeof parsed.detail === "string") {
-      return parsed.detail;
-    }
-  } catch {
-    // not JSON
-  }
-  return body || statusText;
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) {
@@ -396,7 +393,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetchWithRetry(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(formatApiError(detail, res.statusText));
@@ -554,7 +551,7 @@ export const api = {
     const token = localStorage.getItem("access_token");
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${API_BASE}/api/v1/ingestion/upload?focus=${focus}`,
       { method: "POST", headers, body: form },
     );

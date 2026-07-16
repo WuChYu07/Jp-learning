@@ -213,3 +213,35 @@ Render／Vercel 連 GitHub 後通常會自動重新部署。
 - Railway Hobby（約 $5／月）
 
 目前以免費方案為準即可。
+
+---
+
+## 正式環境（個人用，2026-07-16）
+
+| 項目 | URL |
+|------|-----|
+| 前端 | https://jp-learning-two.vercel.app |
+| 後端 | https://jp-learning.onrender.com |
+| Health | https://jp-learning.onrender.com/health |
+
+### Render 必設 `CORS_ORIGINS`
+
+```
+https://jp-learning-two.vercel.app,http://localhost:5173
+```
+
+（無尾隨斜線；與瀏覽器網址列 origin 完全一致。）
+
+### Vercel 必設 `VITE_API_BASE`
+
+```
+https://jp-learning.onrender.com
+```
+
+改完環境變數後要在 Vercel **Redeploy** 才會進 build。
+
+### 手機驗收
+
+1. 手機開 [jp-learning-two.vercel.app](https://jp-learning-two.vercel.app/)
+2. 若久沒用，頂部會顯示「後端醒來中」— 等約 30–60 秒
+3. 單字卡滑動、測驗點選、文法複習各試一次
