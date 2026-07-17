@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, DashboardStats, formatUserFacingError } from "../lib/api";
+import { useSlowLoadHint } from "../lib/backendStatus";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const loadHint = useSlowLoadHint(loading);
 
   useEffect(() => {
+    setLoading(true);
     api
       .dashboardStats()
       .then(setStats)
-      .catch((err: unknown) => setError(formatUserFacingError(err)));
+      .catch((err: unknown) => setError(formatUserFacingError(err)))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -21,6 +26,9 @@ export default function DashboardPage() {
           歡迎回來
         </h1>
         <p className="mt-2 text-stone-600">今天也一起保持初心，穩步學習吧。</p>
+        {loading && !stats && (
+          <p className="mt-4 text-sm font-medium text-amber-800">{loadHint}</p>
+        )}
         {stats && (
           <div className="mt-5 grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
             <div className="rounded-xl bg-orange-50 px-4 py-3 text-center ring-1 ring-orange-100">

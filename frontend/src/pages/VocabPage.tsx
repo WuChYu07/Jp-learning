@@ -4,7 +4,8 @@ import SpeakButton from "../components/SpeakButton";
 import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
 import VocabRelationHints from "../components/VocabRelationHints";
-import { api, Vocabulary, VocabularySummary, VocabularyWriteInput } from "../lib/api";
+import { api, Vocabulary, VocabularySummary, VocabularyWriteInput, formatUserFacingError } from "../lib/api";
+import { useSlowLoadHint } from "../lib/backendStatus";
 import { vocabDisplay } from "../lib/vocabDisplay";
 
 const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1"] as const;
@@ -38,6 +39,7 @@ export default function VocabPage() {
   const [nextLoading, setNextLoading] = useState(false);
   const detailReqId = useRef(0);
   const viewedIds = useRef<Set<string>>(new Set());
+  const loadHint = useSlowLoadHint(loading);
 
   const loadList = async (offset = 0, append = false) => {
     if (append) setLoadingMore(true);
@@ -56,7 +58,7 @@ export default function VocabPage() {
         setSelectedId(navId || null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "載入失敗");
+      setError(formatUserFacingError(err));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -196,7 +198,14 @@ export default function VocabPage() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {loading && <p className="text-sm text-stone-400">載入中...</p>}
+      {loading && (
+        <div className="rounded-2xl bg-amber-50 px-4 py-6 text-center ring-1 ring-amber-200">
+          <p className="text-sm font-medium text-amber-950">{loadHint}</p>
+          <p className="mt-2 text-xs text-amber-800">
+            第一次打開或久未使用時，Render 會休眠；醒來後列表就會出現。
+          </p>
+        </div>
+      )}
 
       {!loading && (
         <div className="grid gap-6 md:grid-cols-[260px_1fr]">

@@ -13,7 +13,9 @@ import {
   ExampleSentence,
   MeaningBlock,
   SupplementaryBlock,
+  formatUserFacingError,
 } from "../lib/api";
+import { useSlowLoadHint } from "../lib/backendStatus";
 
 function toGrammarSummary(g: Grammar): GrammarSummary {
   return {
@@ -62,7 +64,9 @@ export default function GrammarPage() {
   const [selected, setSelected] = useState<Grammar | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
+  const loadHint = useSlowLoadHint(listLoading);
   const [enriching, setEnriching] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -108,13 +112,15 @@ export default function GrammarPage() {
   // List once on mount (not on every location.state change).
   useEffect(() => {
     const navId = (location.state as { grammarId?: string } | null)?.grammarId;
+    setListLoading(true);
     api
       .listGrammar({ limit: 100 })
       .then((res) => {
         setItems(res.items);
         setSelectedId(navId || null);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) => setError(formatUserFacingError(err)))
+      .finally(() => setListLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -297,7 +303,16 @@ export default function GrammarPage() {
         </div>
       </div>
       {error && <p className="text-red-600">{error}</p>}
+      {listLoading && (
+        <div className="rounded-2xl bg-amber-50 px-4 py-6 text-center ring-1 ring-amber-200">
+          <p className="text-sm font-medium text-amber-950">{loadHint}</p>
+          <p className="mt-2 text-xs text-amber-800">
+            第一次打開或久未使用時，Render 會休眠；醒來後列表就會出現。
+          </p>
+        </div>
+      )}
 
+      {!listLoading && (
       <div className="grid gap-6 md:grid-cols-[260px_1fr]">
         <div
           className={`max-h-[75vh] space-y-2 overflow-y-auto pr-1 ${
@@ -500,6 +515,7 @@ export default function GrammarPage() {
           )}
         </div>
       </div>
+      )}
 
       {(editorMode === "create" || editorMode === "edit") && (
         <EditModalShell
