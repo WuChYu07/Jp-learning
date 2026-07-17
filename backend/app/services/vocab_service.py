@@ -257,11 +257,14 @@ class VocabService:
         self, user_id: str, limit: int, offset: int
     ) -> ReviewBatch:
         """
-        Multi-user SRS review algorithm:
-          1. Overdue reviews (next_review_date <= now), most overdue first
-          2. New cards never reviewed, by created_at
-        Offset skips within the combined stream.
+        Mixed review deck (day-stable):
+          - due cards (shuffled)
+          - never-reviewed cards
+          - low-score early reviews (not yet due)
+        Each block prefers ~5 due / 2 new / 3 low-score.
         """
+        from app.services.review_queue import build_mixed_review_queue, daily_seed
+
         now_iso = datetime.now(UTC).isoformat()
 
         total_vocab = (
@@ -283,11 +286,14 @@ class VocabService:
 
         all_progress = (
             self.db.table("user_vocab_progress")
-            .select("vocabulary_id")
+            .select("vocabulary_id, review_score")
             .eq("user_id", user_id)
             .execute()
         ).data or []
         seen_ids = {r["vocabulary_id"] for r in all_progress}
+        score_map = {
+            r["vocabulary_id"]: float(r.get("review_score") or 0) for r in all_progress
+        }
 
         unseen_rows = (
             self.db.table("vocabularies")
@@ -297,7 +303,12 @@ class VocabService:
         ).data or []
         new_ids = [r["id"] for r in unseen_rows if r["id"] not in seen_ids]
 
-        combined = due_ids + new_ids
+        combined = build_mixed_review_queue(
+            due_ids=due_ids,
+            new_ids=new_ids,
+            score_by_id=score_map,
+            seed=daily_seed(user_id, "vocab"),
+        )
         total_available = len(combined)
         page = combined[offset : offset + limit]
         items = [self._load_vocab_out(UUID(vid), user_id=user_id) for vid in page]

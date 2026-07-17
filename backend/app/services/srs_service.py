@@ -28,14 +28,20 @@ def rating_to_quality(rating: str) -> int:
     return mapping.get(rating.lower(), 3)
 
 
+# Failed cards come back quickly so the same session / same day can retry them.
+AGAIN_REQUEUE_MINUTES = 10
+
+
 def apply_review(state: SrsState, quality: int) -> SrsUpdate:
     ef = state.easiness_factor
     reps = state.repetitions
     interval = state.interval_days
+    now = datetime.now(UTC)
 
     if quality < 3:
         reps = 0
         interval = 1
+        next_review = now + timedelta(minutes=AGAIN_REQUEUE_MINUTES)
     else:
         if reps == 0:
             interval = 1
@@ -48,8 +54,8 @@ def apply_review(state: SrsState, quality: int) -> SrsUpdate:
             1.3,
             ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)),
         )
+        next_review = now + timedelta(days=interval)
 
-    next_review = datetime.now(UTC) + timedelta(days=interval)
     return SrsUpdate(
         easiness_factor=round(ef, 2),
         repetitions=reps,
