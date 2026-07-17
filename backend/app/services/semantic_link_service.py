@@ -206,6 +206,113 @@ class SemanticLinkService:
             "threshold": threshold,
         }
 
+    def prune_weak_embedding_links(
+        self,
+        *,
+        min_confidence: float | None = None,
+    ) -> dict:
+        """Delete embedding-origin same_meaning links below the confidence floor."""
+        floor = (
+            settings.EMBEDDING_SIMILARITY_THRESHOLD
+            if min_confidence is None
+            else min_confidence
+        )
+        rows = (
+            self.db.table("content_links")
+            .select("id, confidence")
+            .eq("relation_type", LinkRelationType.SAME_MEANING.value)
+            .eq("origin", "embedding")
+            .execute()
+        ).data or []
+
+        to_delete = [
+            row["id"]
+            for row in rows
+            if float(row.get("confidence") or 0.0) < floor
+        ]
+        for link_id in to_delete:
+            self.db.table("content_links").delete().eq("id", link_id).execute()
+
+        return {
+            "ok": True,
+            "min_confidence": floor,
+            "scanned": len(rows),
+            "removed": len(to_delete),
+        }
+
+    def recompute_semantic_links(
+        self,
+        *,
+        entity_types: list[LinkEntityType] | None = None,
+        limit: int = 50,
+        force: bool = False,
+    ) -> dict:
+        """Batch re-sync embeddings/links for recent entities (Map maintenance)."""
+        types = entity_types or [LinkEntityType.GRAMMAR, LinkEntityType.VOCABULARY]
+        per_type = max(1, limit // max(1, len(types)))
+        results: list[dict] = []
+        totals = {
+            "entities": 0,
+            "links_created": 0,
+            "links_updated": 0,
+            "links_removed": 0,
+            "failed": 0,
+        }
+
+        if LinkEntityType.GRAMMAR in types:
+            rows = (
+                self.db.table("grammars")
+                .select("id")
+                .neq("sync_status", "archived")
+                .order("updated_at", desc=True)
+                .limit(per_type)
+                .execute()
+            ).data or []
+            for row in rows:
+                totals["entities"] += 1
+                try:
+                    res = self.sync_grammar(UUID(row["id"]), force=force)
+                    if res.get("ok"):
+                        totals["links_created"] += int(res.get("links_created") or 0)
+                        totals["links_updated"] += int(res.get("links_updated") or 0)
+                        totals["links_removed"] += int(res.get("links_removed") or 0)
+                    else:
+                        totals["failed"] += 1
+                    results.append(res)
+                except Exception:
+                    logger.exception("recompute grammar failed: %s", row["id"])
+                    totals["failed"] += 1
+
+        if LinkEntityType.VOCABULARY in types:
+            rows = (
+                self.db.table("vocabularies")
+                .select("id")
+                .order("updated_at", desc=True)
+                .limit(per_type)
+                .execute()
+            ).data or []
+            for row in rows:
+                totals["entities"] += 1
+                try:
+                    res = self.sync_vocabulary(UUID(row["id"]), force=force)
+                    if res.get("ok"):
+                        totals["links_created"] += int(res.get("links_created") or 0)
+                        totals["links_updated"] += int(res.get("links_updated") or 0)
+                        totals["links_removed"] += int(res.get("links_removed") or 0)
+                    else:
+                        totals["failed"] += 1
+                    results.append(res)
+                except Exception:
+                    logger.exception("recompute vocabulary failed: %s", row["id"])
+                    totals["failed"] += 1
+
+        return {
+            "ok": True,
+            "threshold": settings.EMBEDDING_SIMILARITY_THRESHOLD,
+            "force": force,
+            **totals,
+        }
+
     def _match_neighbors(
         self,
         entity_type: LinkEntityType,

@@ -40,11 +40,11 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
-    # Grammar-note embeddings cluster tightly; keep threshold high.
-    EMBEDDING_SIMILARITY_THRESHOLD: float = 0.90
-    EMBEDDING_MATCH_TOP_K: int = 5
+    # Grammar-note embeddings cluster tightly; keep threshold high (P3: raised to cut weak links).
+    EMBEDDING_SIMILARITY_THRESHOLD: float = 0.93
+    EMBEDDING_MATCH_TOP_K: int = 3
     # Only keep neighbors within this gap of the best match (filters soft clusters).
-    EMBEDDING_MAX_SCORE_GAP: float = 0.025
+    EMBEDDING_MAX_SCORE_GAP: float = 0.015
 
     # Rate limiting
     DAILY_AI_REQUEST_LIMIT: int = 50

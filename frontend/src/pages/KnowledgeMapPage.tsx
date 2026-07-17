@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RelationGraphPanel from "../components/RelationGraphPanel";
-import RelationLinkList, { RELATION_LABELS } from "../components/RelationLinkList";
+import { RELATION_COLORS, RELATION_LABELS } from "../components/RelationLinkList";
 import {
   api,
+  GraphEdge,
   GraphNode,
   LinkRelationType,
   RelationGraph,
@@ -19,15 +20,25 @@ const RELATION_FILTERS: Array<LinkRelationType | ""> = [
   "derived",
 ];
 
+const CONFIDENCE_PRESETS = [
+  { value: 0, label: "全部信心" },
+  { value: 0.9, label: "≥ 0.90" },
+  { value: 0.93, label: "≥ 0.93（建議）" },
+  { value: 0.95, label: "≥ 0.95" },
+] as const;
+
 export default function KnowledgeMapPage() {
   const navigate = useNavigate();
   const [graph, setGraph] = useState<RelationGraph | null>(null);
   const [jlpt, setJlpt] = useState("");
   const [relation, setRelation] = useState<LinkRelationType | "">("");
   const [includeVocab, setIncludeVocab] = useState(false);
+  const [minConfidence, setMinConfidence] = useState(0.93);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [listMode, setListMode] = useState(false);
 
   const load = async () => {
@@ -41,6 +52,7 @@ export default function KnowledgeMapPage() {
         entity_types: types,
         jlpt: jlpt || undefined,
         relation_types: relation || undefined,
+        min_confidence: minConfidence > 0 ? minConfidence : undefined,
         limit: 300,
       });
       setGraph(data);
@@ -55,7 +67,7 @@ export default function KnowledgeMapPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jlpt, relation, includeVocab]);
+  }, [jlpt, relation, includeVocab, minConfidence]);
 
   const filtered = useMemo(() => {
     if (!graph) return null;
@@ -85,6 +97,68 @@ export default function KnowledgeMapPage() {
     }
   };
 
+  const handleDeleteEdge = async (edge: GraphEdge) => {
+    if (!confirm("確定刪除此關聯？")) return;
+    try {
+      await api.deleteLink(edge.id);
+      setInfo("已刪除關聯");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "刪除失敗");
+    }
+  };
+
+  const handlePrune = async () => {
+    if (
+      !confirm(
+        `修剪信心值低於 ${minConfidence || 0.93} 的自動語意連線？\n（手動／AI 建立的關聯不會動）`,
+      )
+    ) {
+      return;
+    }
+    setBusy("prune");
+    setError("");
+    setInfo("");
+    try {
+      const res = await api.pruneWeakLinks(minConfidence || 0.93);
+      setInfo(`已掃描 ${res.scanned} 條，刪除弱連線 ${res.removed} 條`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "修剪失敗");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleRecompute = async () => {
+    if (
+      !confirm(
+        "重算近期約 40 筆文法／單字的語意關聯？\n會呼叫 embedding（消耗少量 Gemini 額度），學習流程不受影響。",
+      )
+    ) {
+      return;
+    }
+    setBusy("recompute");
+    setError("");
+    setInfo("");
+    try {
+      const res = await api.recomputeSemanticLinks({
+        entity_types: includeVocab ? "grammar,vocabulary" : "grammar",
+        limit: 40,
+        force: true,
+      });
+      setInfo(
+        `重算 ${res.entities} 筆：新增 ${res.links_created}、更新 ${res.links_updated}、移除 ${res.links_removed}` +
+          (res.failed ? `、失敗 ${res.failed}` : ""),
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "重算失敗");
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -92,7 +166,7 @@ export default function KnowledgeMapPage() {
           知識地圖
         </h1>
         <p className="mt-1 text-sm text-stone-600">
-          全局檢視跨 JLPT 的語意關聯；節點顏色標示級別，點節點可跳到詳情複習
+          全局檢視語意關聯。學習頁不會自動重算；在這裡修剪弱連線或批次重算。
         </p>
       </div>
 
@@ -118,6 +192,17 @@ export default function KnowledgeMapPage() {
           {RELATION_FILTERS.filter(Boolean).map((r) => (
             <option key={r} value={r}>
               {RELATION_LABELS[r as LinkRelationType]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={minConfidence}
+          onChange={(e) => setMinConfidence(Number(e.target.value))}
+          className="rounded-full bg-white px-4 py-2 text-sm ring-1 ring-orange-100"
+        >
+          {CONFIDENCE_PRESETS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>
@@ -151,20 +236,45 @@ export default function KnowledgeMapPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void handlePrune()}
+          disabled={Boolean(busy)}
+          className="rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50"
+        >
+          {busy === "prune" ? "修剪中…" : "修剪弱連線"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleRecompute()}
+          disabled={Boolean(busy)}
+          className="rounded-full bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-900 disabled:opacity-50"
+        >
+          {busy === "recompute" ? "重算中…" : "重算語意關聯"}
+        </button>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {info && <p className="text-sm text-emerald-700">{info}</p>}
       {loading && <p className="text-sm text-stone-400">載入中...</p>}
 
       {!loading && filtered && (
         <div className="rounded-2xl bg-white p-4 ring-1 ring-orange-100">
           <p className="mb-3 text-xs text-stone-500">
             {filtered.nodes.length} 個節點 · {filtered.edges.length} 條關聯
+            {minConfidence > 0 ? ` · 信心 ≥ ${minConfidence.toFixed(2)}` : ""}
           </p>
           {filtered.nodes.length === 0 ? (
             <p className="py-12 text-center text-sm text-stone-400">
-              尚無圖譜資料。請先執行 migration 007 與 seed_content_links.py。
+              尚無圖譜資料。可按「重算語意關聯」，或到文法／單字詳情按「計算語意關聯」。
             </p>
           ) : listMode ? (
-            <RelationLinkList graph={filtered} onSelectNode={handleSelect} />
+            <MapEdgeList
+              graph={filtered}
+              onSelectNode={handleSelect}
+              onDeleteEdge={handleDeleteEdge}
+            />
           ) : (
             <RelationGraphPanel
               graph={filtered}
@@ -176,5 +286,83 @@ export default function KnowledgeMapPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Flat edge list for global map maintenance (confidence + delete). */
+function MapEdgeList({
+  graph,
+  onSelectNode,
+  onDeleteEdge,
+}: {
+  graph: RelationGraph;
+  onSelectNode: (node: GraphNode) => void;
+  onDeleteEdge: (edge: GraphEdge) => void;
+}) {
+  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+  const rows = graph.edges
+    .map((edge) => {
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      if (!source || !target) return null;
+      return { edge, source, target };
+    })
+    .filter(
+      (row): row is { edge: GraphEdge; source: GraphNode; target: GraphNode } =>
+        Boolean(row),
+    )
+    .sort((a, b) => (a.edge.confidence ?? 1) - (b.edge.confidence ?? 1));
+
+  if (rows.length === 0) {
+    return <p className="text-sm text-stone-400">目前沒有符合條件的關聯。</p>;
+  }
+
+  return (
+    <ul className="max-h-[520px] space-y-2 overflow-y-auto">
+      {rows.map(({ edge, source, target }) => (
+        <li
+          key={edge.id}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-2 ring-1 ring-stone-100"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                style={{ backgroundColor: RELATION_COLORS[edge.relation_type] }}
+              >
+                {edge.label_zh || RELATION_LABELS[edge.relation_type]}
+              </span>
+              <span className="text-[11px] text-stone-400">
+                信心 {(edge.confidence ?? 1).toFixed(2)}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-stone-700">
+              <button
+                type="button"
+                className="font-medium text-[var(--color-primary-dark)] hover:underline"
+                onClick={() => onSelectNode(source)}
+              >
+                {source.label}
+              </button>
+              <span className="mx-1 text-stone-400">↔</span>
+              <button
+                type="button"
+                className="font-medium text-[var(--color-primary-dark)] hover:underline"
+                onClick={() => onSelectNode(target)}
+              >
+                {target.label}
+              </button>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void onDeleteEdge(edge)}
+            className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-red-600 ring-1 ring-red-100"
+          >
+            刪除
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

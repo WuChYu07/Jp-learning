@@ -393,10 +393,6 @@ class GrammarEnrichmentService:
         if rows:
             self.db.table("grammar_usages").insert(rows).execute()
 
-        from app.models.schemas.links import LinkEntityType
-        from app.services.semantic_link_service import semantic_link_service
-
-        semantic_link_service.sync_entity_safe(LinkEntityType.GRAMMAR, grammar_id)
         return grammar_service.get_grammar(grammar_id)
 
 

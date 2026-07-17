@@ -41,6 +41,12 @@ def get_global_graph(
         description="Comma-separated relation types",
     ),
     limit: int = Query(default=200, ge=1, le=500),
+    min_confidence: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Hide edges below this confidence (display filter)",
+    ),
 ) -> RelationGraphOut:
     etypes = _parse_entity_types(entity_types)
     rtypes = _parse_relation_types(relation_types)
@@ -49,6 +55,7 @@ def get_global_graph(
         jlpt=jlpt,
         relation_types=rtypes,
         limit=limit,
+        min_confidence=min_confidence,
     )
 
 
@@ -151,6 +158,36 @@ def sync_semantic_grammar(grammar_id: UUID) -> dict:
 @router.post("/sync-semantic/vocabulary/{vocabulary_id}")
 def sync_semantic_vocabulary(vocabulary_id: UUID) -> dict:
     return semantic_link_service.sync_vocabulary(vocabulary_id, force=True)
+
+
+@router.post("/prune-weak")
+def prune_weak_links(
+    min_confidence: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Defaults to EMBEDDING_SIMILARITY_THRESHOLD",
+    ),
+) -> dict:
+    """Remove weak auto-generated same_meaning links (Map maintenance)."""
+    return semantic_link_service.prune_weak_embedding_links(min_confidence=min_confidence)
+
+
+@router.post("/recompute-semantic")
+def recompute_semantic_links(
+    entity_types: str | None = Query(
+        default="grammar,vocabulary",
+        description="Comma-separated: grammar,vocabulary",
+    ),
+    limit: int = Query(default=40, ge=1, le=120),
+    force: bool = Query(default=False),
+) -> dict:
+    """Batch recompute embeddings + same_meaning links for recent entities."""
+    return semantic_link_service.recompute_semantic_links(
+        entity_types=_parse_entity_types(entity_types),
+        limit=limit,
+        force=force,
+    )
 
 
 def _parse_entity_types(raw: str | None) -> list[LinkEntityType] | None:

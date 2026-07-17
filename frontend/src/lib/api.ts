@@ -638,14 +638,49 @@ export const api = {
     jlpt?: string;
     relation_types?: string;
     limit?: number;
+    min_confidence?: number;
   }) => {
     const q = new URLSearchParams();
     if (params?.entity_types) q.set("entity_types", params.entity_types);
     if (params?.jlpt) q.set("jlpt", params.jlpt);
     if (params?.relation_types) q.set("relation_types", params.relation_types);
     if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.min_confidence != null) {
+      q.set("min_confidence", String(params.min_confidence));
+    }
     const qs = q.toString();
     return request<RelationGraph>(`/api/v1/graph${qs ? `?${qs}` : ""}`);
+  },
+  pruneWeakLinks: (min_confidence?: number) => {
+    const q = new URLSearchParams();
+    if (min_confidence != null) q.set("min_confidence", String(min_confidence));
+    const qs = q.toString();
+    return request<{
+      ok: boolean;
+      min_confidence: number;
+      scanned: number;
+      removed: number;
+    }>(`/api/v1/graph/prune-weak${qs ? `?${qs}` : ""}`, { method: "POST" });
+  },
+  recomputeSemanticLinks: (params?: {
+    entity_types?: string;
+    limit?: number;
+    force?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.entity_types) q.set("entity_types", params.entity_types);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.force) q.set("force", "true");
+    const qs = q.toString();
+    return request<{
+      ok: boolean;
+      threshold: number;
+      entities: number;
+      links_created: number;
+      links_updated: number;
+      links_removed: number;
+      failed: number;
+    }>(`/api/v1/graph/recompute-semantic${qs ? `?${qs}` : ""}`, { method: "POST" });
   },
   suggestGrammarLinks: (id: string) =>
     request<SuggestLinksResponse>(`/api/v1/grammar/${id}/suggest-links`, {

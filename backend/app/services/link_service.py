@@ -162,6 +162,7 @@ class LinkService:
         jlpt: str | None = None,
         relation_types: list[LinkRelationType] | None = None,
         limit: int = 200,
+        min_confidence: float | None = None,
     ) -> RelationGraphOut:
         query = self.db.table("content_links").select("*").limit(limit)
         if relation_types:
@@ -170,6 +171,13 @@ class LinkService:
             )
         result = query.execute()
         rows = result.data or []
+
+        if min_confidence is not None:
+            rows = [
+                row
+                for row in rows
+                if float(row.get("confidence") or 0.0) >= min_confidence
+            ]
 
         allowed_types = {t.value for t in (entity_types or list(LinkEntityType))}
         filtered: list[dict] = []

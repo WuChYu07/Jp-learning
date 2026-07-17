@@ -18,11 +18,9 @@ from app.models.schemas.grammar import (
     GrammarUsageWrite,
     GrammarWriteInput,
 )
-from app.models.schemas.links import LinkEntityType
 from app.services.grammar_enrichment_utils import needs_image_enrichment
 from app.services.hash_service import grammar_entry_hash
 from app.services.score_service import score_service
-from app.services.semantic_link_service import semantic_link_service
 from app.services.srs_service import apply_review, default_srs_state, rating_to_quality
 from app.services.text_sanitize import clean_text
 
@@ -186,7 +184,6 @@ class GrammarService:
         rows = _usage_rows_from_write(grammar_id, payload.usages)
         if rows:
             self.db.table("grammar_usages").insert(rows).execute()
-        semantic_link_service.sync_entity_safe(LinkEntityType.GRAMMAR, grammar_id)
         return self._load_grammar_out(grammar_id)
 
     def update_grammar(self, grammar_id: UUID, payload: GrammarWriteInput) -> GrammarOut:
@@ -218,7 +215,6 @@ class GrammarService:
         rows = _usage_rows_from_write(grammar_id, payload.usages)
         if rows:
             self.db.table("grammar_usages").insert(rows).execute()
-        semantic_link_service.sync_entity_safe(LinkEntityType.GRAMMAR, grammar_id)
         return self._load_grammar_out(grammar_id)
 
     def archive_grammar(self, grammar_id: UUID) -> None:

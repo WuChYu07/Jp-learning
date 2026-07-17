@@ -289,12 +289,6 @@ class IngestionService:
         ]
         gap_updated = self._fill_vocab_definition_gaps(hash_map, id_by_hash, existing_hashes)
 
-        from app.models.schemas.links import LinkEntityType
-        from app.services.semantic_link_service import semantic_link_service
-
-        for vid in newly_inserted:
-            semantic_link_service.sync_entity_safe(LinkEntityType.VOCABULARY, vid)
-
         existing_count = len(existing_hashes)
         return PersistStats(
             source_rows=len(items),
@@ -422,13 +416,8 @@ class IngestionService:
             if usage_batch:
                 self.db.table("grammar_usages").insert(usage_batch).execute()
 
-        from app.models.schemas.links import LinkEntityType
-        from app.services.semantic_link_service import semantic_link_service
-
-        for gid in newly_inserted:
-            semantic_link_service.sync_entity_safe(LinkEntityType.GRAMMAR, gid)
-
         # Non-Notion grammar persist creates new rows only; existing rows are left untouched.
+        # Semantic links are maintained on-demand from Map / detail pages (P3).
         return PersistStats(
             source_rows=len(items),
             new=len(newly_inserted),
