@@ -4,6 +4,7 @@ import {
   IngestionResponse,
   JlptSuggestion,
   NotionSyncPreview,
+  SyncReport,
   TextParsePreview,
 } from "../lib/api";
 
@@ -997,15 +998,90 @@ function ResultCard({ result }: { result: IngestionResponse }) {
           <p className="text-2xl font-bold text-[var(--color-primary-dark)]">
             {result.vocabulary_count}
           </p>
-          <p className="text-xs text-stone-500">單字</p>
+          <p className="text-xs text-stone-500">單字寫入／更新</p>
         </div>
         <div className="rounded-xl bg-green-50 p-4 text-center">
           <p className="text-2xl font-bold text-emerald-700">
             {result.grammar_count}
           </p>
-          <p className="text-xs text-stone-500">文法</p>
+          <p className="text-xs text-stone-500">文法寫入／更新</p>
         </div>
       </div>
+      {result.report && <SyncReportPanel report={result.report} />}
+    </div>
+  );
+}
+
+function SyncReportPanel({ report }: { report: SyncReport }) {
+  const rows: {
+    label: string;
+    source: number;
+    added: number;
+    updated: number;
+    skipped: number;
+    deduped: number;
+  }[] = [
+    {
+      label: "單字",
+      source: report.vocab_source_rows,
+      added: report.vocab_new,
+      updated: report.vocab_updated,
+      skipped: report.vocab_skipped,
+      deduped: report.vocab_dedupe_removed,
+    },
+    {
+      label: "文法",
+      source: report.grammar_source_rows,
+      added: report.grammar_new,
+      updated: report.grammar_updated,
+      skipped: report.grammar_skipped,
+      deduped: report.grammar_dedupe_removed,
+    },
+  ];
+
+  const hasAny = rows.some((r) => r.source > 0);
+  if (!hasAny) {
+    return (
+      <p className="mt-4 rounded-xl bg-stone-50 px-4 py-3 text-center text-xs text-stone-500 ring-1 ring-stone-100">
+        沒有來源項目可處理。
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-5 overflow-hidden rounded-2xl ring-1 ring-stone-100">
+      <div className="bg-stone-50 px-4 py-2 text-xs font-semibold text-stone-600">
+        同步品質報表
+      </div>
+      <table className="w-full text-center text-xs">
+        <thead>
+          <tr className="border-b border-stone-100 text-stone-400">
+            <th className="py-2 font-medium">類型</th>
+            <th className="py-2 font-medium">來源</th>
+            <th className="py-2 font-medium text-emerald-600">新增</th>
+            <th className="py-2 font-medium text-amber-600">更新</th>
+            <th className="py-2 font-medium">略過</th>
+            <th className="py-2 font-medium">去重</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows
+            .filter((r) => r.source > 0)
+            .map((r) => (
+              <tr key={r.label} className="border-b border-stone-50 last:border-0">
+                <td className="py-2 font-medium text-stone-700">{r.label}</td>
+                <td className="py-2 text-stone-600">{r.source}</td>
+                <td className="py-2 font-semibold text-emerald-700">{r.added}</td>
+                <td className="py-2 font-semibold text-amber-700">{r.updated}</td>
+                <td className="py-2 text-stone-500">{r.skipped}</td>
+                <td className="py-2 text-stone-400">{r.deduped}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      <p className="bg-stone-50/60 px-4 py-2 text-[11px] leading-relaxed text-stone-400">
+        來源＝解析出的筆數；略過＝內容一致未變動；去重＝來源內重複而合併。
+      </p>
     </div>
   );
 }

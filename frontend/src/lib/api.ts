@@ -181,12 +181,26 @@ export type TranslationGradeResult = {
   grammar_notes?: string;
 };
 
+export type SyncReport = {
+  vocab_source_rows: number;
+  vocab_new: number;
+  vocab_updated: number;
+  vocab_skipped: number;
+  vocab_dedupe_removed: number;
+  grammar_source_rows: number;
+  grammar_new: number;
+  grammar_updated: number;
+  grammar_skipped: number;
+  grammar_dedupe_removed: number;
+};
+
 export type IngestionResponse = {
   ingestion_id: string;
   content_hash: string;
   cached: boolean;
   vocabulary_count: number;
   grammar_count: number;
+  report?: SyncReport | null;
 };
 
 export type TextParsePreview = {

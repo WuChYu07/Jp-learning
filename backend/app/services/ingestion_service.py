@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -6,7 +7,7 @@ from supabase import Client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.common import SourceType
 from app.models.schemas.grammar import GrammarItemInput, GrammarOut
-from app.models.schemas.ingestion import IngestionParseResult, IngestionResponse
+from app.models.schemas.ingestion import IngestionParseResult, IngestionResponse, SyncReport
 from app.models.schemas.vocab import (
     VocabularyDefinitionOut,
     VocabularyItemInput,
@@ -17,6 +18,22 @@ from app.services.gemini_service import IngestionFocus
 from app.services.grammar_service import grammar_service
 from app.services.hash_service import compute_upload_hash, grammar_entry_hash, vocab_entry_hash
 from app.services.text_sanitize import clean_text
+
+
+@dataclass
+class PersistStats:
+    """Write outcome for one entity type during a persist call."""
+
+    source_rows: int = 0
+    new: int = 0
+    updated: int = 0
+    skipped: int = 0
+    dedupe_removed: int = 0
+
+    @property
+    def written(self) -> int:
+        """Rows created or changed (used as the headline count)."""
+        return self.new + self.updated
 
 
 class IngestionService:
@@ -47,22 +64,22 @@ class IngestionService:
             user_id=user_id,
         )
 
-        vocab_count = self._persist_vocabularies_bulk(
+        vocab_stats = self._persist_vocabularies_bulk(
             parsed.vocabularies, ingestion_id, user_id, source_type
         )
         if source_type == SourceType.NOTION and any(
             item.notion_block_id for item in parsed.grammars
         ):
             try:
-                grammar_count = self._persist_notion_grammars_bulk(
+                grammar_stats = self._persist_notion_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id
                 )
             except Exception:
-                grammar_count = self._persist_grammars_bulk(
+                grammar_stats = self._persist_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id, source_type
                 )
         else:
-            grammar_count = self._persist_grammars_bulk(
+            grammar_stats = self._persist_grammars_bulk(
                 parsed.grammars, ingestion_id, user_id, source_type
             )
 
@@ -70,10 +87,11 @@ class IngestionService:
             ingestion_id=ingestion_id,
             content_hash=content_hash,
             cached=False,
-            vocabulary_count=vocab_count,
-            grammar_count=grammar_count,
+            vocabulary_count=vocab_stats.written,
+            grammar_count=grammar_stats.written,
             vocabularies=[],
             grammars=[],
+            report=_build_report(vocab_stats, grammar_stats),
         )
         self._save_parsed_payload(ingestion_id, response)
         return response
@@ -103,22 +121,22 @@ class IngestionService:
             user_id=user_id,
         )
 
-        vocab_count = self._persist_vocabularies_bulk(
+        vocab_stats = self._persist_vocabularies_bulk(
             parsed.vocabularies, ingestion_id, user_id, source_type
         )
         if source_type == SourceType.NOTION and any(
             item.notion_block_id for item in parsed.grammars
         ):
             try:
-                grammar_count = self._persist_notion_grammars_bulk(
+                grammar_stats = self._persist_notion_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id
                 )
             except Exception:
-                grammar_count = self._persist_grammars_bulk(
+                grammar_stats = self._persist_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id, source_type
                 )
         else:
-            grammar_count = self._persist_grammars_bulk(
+            grammar_stats = self._persist_grammars_bulk(
                 parsed.grammars, ingestion_id, user_id, source_type
             )
 
@@ -126,10 +144,11 @@ class IngestionService:
             ingestion_id=ingestion_id,
             content_hash=content_hash,
             cached=False,
-            vocabulary_count=vocab_count,
-            grammar_count=grammar_count,
+            vocabulary_count=vocab_stats.written,
+            grammar_count=grammar_stats.written,
             vocabularies=[],
             grammars=[],
+            report=_build_report(vocab_stats, grammar_stats),
         )
         self._save_parsed_payload(ingestion_id, response)
         return response
@@ -204,9 +223,9 @@ class IngestionService:
         ingestion_id: UUID,
         user_id: str | None,
         source_type: SourceType,
-    ) -> int:
+    ) -> PersistStats:
         if not items:
-            return 0
+            return PersistStats()
 
         hash_map = {vocab_entry_hash(item.word, item.reading): item for item in items}
         id_by_hash: dict[str, UUID] = {}
@@ -268,7 +287,7 @@ class IngestionService:
         existing_hashes = [
             h for h in hash_map if h in id_by_hash and id_by_hash[h] not in newly_inserted
         ]
-        self._fill_vocab_definition_gaps(hash_map, id_by_hash, existing_hashes)
+        gap_updated = self._fill_vocab_definition_gaps(hash_map, id_by_hash, existing_hashes)
 
         from app.models.schemas.links import LinkEntityType
         from app.services.semantic_link_service import semantic_link_service
@@ -276,15 +295,26 @@ class IngestionService:
         for vid in newly_inserted:
             semantic_link_service.sync_entity_safe(LinkEntityType.VOCABULARY, vid)
 
-        return len(hash_map)
+        existing_count = len(existing_hashes)
+        return PersistStats(
+            source_rows=len(items),
+            new=len(newly_inserted),
+            updated=gap_updated,
+            skipped=existing_count - gap_updated,
+            dedupe_removed=len(items) - len(hash_map),
+        )
 
     def _fill_vocab_definition_gaps(
         self,
         hash_map: dict[str, VocabularyItemInput],
         id_by_hash: dict[str, UUID],
         existing_hashes: list[str],
-    ) -> None:
-        """For already-synced vocab, write Notion examples/notes only into empty fields."""
+    ) -> int:
+        """For already-synced vocab, write Notion examples/notes only into empty fields.
+
+        Returns the number of existing rows that actually received a gap fill.
+        """
+        updated = 0
         for entry_hash in existing_hashes:
             item = hash_map.get(entry_hash)
             if not item or not item.definitions:
@@ -321,6 +351,8 @@ class IngestionService:
                     .eq("id", row["id"])
                     .execute()
                 )
+                updated += 1
+        return updated
 
     def _persist_grammars_bulk(
         self,
@@ -328,9 +360,9 @@ class IngestionService:
         ingestion_id: UUID,
         user_id: str | None,
         source_type: SourceType,
-    ) -> int:
+    ) -> PersistStats:
         if not items:
-            return 0
+            return PersistStats()
 
         hash_map = {grammar_entry_hash(item.grammar_point): item for item in items}
         id_by_hash: dict[str, UUID] = {}
@@ -396,17 +428,24 @@ class IngestionService:
         for gid in newly_inserted:
             semantic_link_service.sync_entity_safe(LinkEntityType.GRAMMAR, gid)
 
-        return len(hash_map)
+        # Non-Notion grammar persist creates new rows only; existing rows are left untouched.
+        return PersistStats(
+            source_rows=len(items),
+            new=len(newly_inserted),
+            updated=0,
+            skipped=len(hash_map) - len(newly_inserted),
+            dedupe_removed=len(items) - len(hash_map),
+        )
 
     def _persist_notion_grammars_bulk(
         self,
         items: list[GrammarItemInput],
         ingestion_id: UUID,
         user_id: str | None,
-    ) -> int:
+    ) -> PersistStats:
         """Upsert Notion grammar units by notion_block_id; skip unchanged."""
         if not items:
-            return 0
+            return PersistStats()
 
         block_ids = [item.notion_block_id for item in items if item.notion_block_id]
         existing_by_block: dict[str, dict] = {}
@@ -427,9 +466,10 @@ class IngestionService:
                     if bid:
                         existing_by_block[bid] = row
 
-        written = 0
+        stats = PersistStats(source_rows=len(items))
         for item in items:
             if item.sync_change == "unchanged":
+                stats.skipped += 1
                 continue
 
             existing = (
@@ -438,6 +478,7 @@ class IngestionService:
 
             # Soft-deleted tombstone: keep archived, never resurrect from Notion.
             if existing and existing.get("sync_status") == "archived":
+                stats.skipped += 1
                 continue
 
             entry_hash = grammar_entry_hash(item.grammar_point)
@@ -473,7 +514,7 @@ class IngestionService:
                             "ingestion_id": str(ingestion_id),
                         }
                     ).eq("id", str(grammar_id)).execute()
-                    written += 1
+                    stats.updated += 1
                     continue
 
                 ai_hash = existing.get("ai_content_hash")
@@ -484,7 +525,7 @@ class IngestionService:
 
                 self.db.table("grammars").update(base_row).eq("id", str(grammar_id)).execute()
                 self._replace_grammar_usages(grammar_id, item)
-                written += 1
+                stats.updated += 1
                 continue
 
             try:
@@ -498,8 +539,10 @@ class IngestionService:
                     .execute()
                 )
                 if fallback is None or not fallback.data:
+                    stats.skipped += 1
                     continue
                 if fallback.data.get("sync_status") == "archived":
+                    stats.skipped += 1
                     continue
                 grammar_id = UUID(fallback.data["id"])
                 meta_only = bool(fallback.data.get("manual_edited_at")) or (
@@ -518,18 +561,19 @@ class IngestionService:
                 else:
                     self.db.table("grammars").update(base_row).eq("id", str(grammar_id)).execute()
                     self._replace_grammar_usages(grammar_id, item)
-                written += 1
+                stats.updated += 1
                 continue
 
             if not inserted.data:
+                stats.skipped += 1
                 continue
             grammar_id = UUID(inserted.data[0]["id"])
             self._insert_grammar_usages(grammar_id, item)
             if item.notion_block_id:
                 existing_by_block[item.notion_block_id] = inserted.data[0]
-            written += 1
+            stats.new += 1
 
-        return written
+        return stats
 
     def _insert_grammar_usages(self, grammar_id: UUID, item: GrammarItemInput) -> None:
         rows = []
@@ -692,6 +736,21 @@ class IngestionService:
 
 
 ingestion_service = IngestionService()
+
+
+def _build_report(vocab: PersistStats, grammar: PersistStats) -> SyncReport:
+    return SyncReport(
+        vocab_source_rows=vocab.source_rows,
+        vocab_new=vocab.new,
+        vocab_updated=vocab.updated,
+        vocab_skipped=vocab.skipped,
+        vocab_dedupe_removed=vocab.dedupe_removed,
+        grammar_source_rows=grammar.source_rows,
+        grammar_new=grammar.new,
+        grammar_updated=grammar.updated,
+        grammar_skipped=grammar.skipped,
+        grammar_dedupe_removed=grammar.dedupe_removed,
+    )
 
 
 def _chunks(items: list, size: int) -> list[list]:
