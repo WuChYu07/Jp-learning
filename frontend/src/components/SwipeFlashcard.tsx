@@ -16,6 +16,8 @@ type SwipeFlashcardProps = {
   onFlip: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  onRateHard?: () => void;
+  onRateEasy?: () => void;
   disabled?: boolean;
 };
 
@@ -26,6 +28,8 @@ export default function SwipeFlashcard({
   onFlip,
   onSwipeLeft,
   onSwipeRight,
+  onRateHard,
+  onRateEasy,
   disabled = false,
 }: SwipeFlashcardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -178,13 +182,35 @@ export default function SwipeFlashcard({
       </div>
 
       {!exiting && (
-        <p className="mt-4 text-center text-sm text-stone-400">
-          <span className="text-red-400">← 不熟</span>
-          <span className="mx-3">·</span>
-          <span className="text-stone-500">點擊翻面</span>
-          <span className="mx-3">·</span>
-          <span className="text-emerald-600">熟悉 →</span>
-        </p>
+        <>
+          <p className="mt-4 text-center text-sm text-stone-400">
+            <span className="text-red-400">← 重來</span>
+            <span className="mx-3">·</span>
+            <span className="text-stone-500">點擊翻面</span>
+            <span className="mx-3">·</span>
+            <span className="text-emerald-600">良好 →</span>
+          </p>
+          {flipped && onRateHard && onRateEasy && (
+            <div className="mx-auto mt-4 grid max-w-xl grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={onRateHard}
+                className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-200 disabled:opacity-50"
+              >
+                有點難 Hard
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={onRateEasy}
+                className="rounded-xl bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-800 ring-1 ring-sky-200 disabled:opacity-50"
+              >
+                很簡單 Easy
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

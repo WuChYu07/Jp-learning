@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
 import GrammarRelationSection from "../components/GrammarRelationSection";
+import SpeakButton from "../components/SpeakButton";
 import {
   api,
   Grammar,
@@ -111,7 +112,7 @@ export default function GrammarPage() {
       .listGrammar({ limit: 100 })
       .then((res) => {
         setItems(res.items);
-        setSelectedId(navId || res.items[0]?.id || null);
+        setSelectedId(navId || null);
       })
       .catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -370,7 +371,13 @@ export default function GrammarPage() {
                       已手動編輯
                     </span>
                   )}
-                  <h2 className="kanji-display mt-2 text-3xl font-bold">{selected.grammar_point}</h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <h2 className="kanji-display text-3xl font-bold">{selected.grammar_point}</h2>
+                    <SpeakButton
+                      text={selected.grammar_point}
+                      label={`播放「${selected.grammar_point}」的發音`}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button

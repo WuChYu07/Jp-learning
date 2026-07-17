@@ -16,7 +16,8 @@ class DashboardStats(BaseModel):
     vocab_due_count: int
     grammar_due_count: int = 0
     streak_days: int
-    daily_goal: int = 10
+    daily_goal: int = 20
+    reviewed_today: int = 0
     review_points: int = 0
     review_score_avg: float = 0
     exam_vocab_avg: float | None = None
@@ -36,6 +37,7 @@ class DashboardService:
         vocab_due = 0
         grammar_due = 0
         streak = 0
+        reviewed_today = 0
         review_points = 0
         review_score_avg = 0.0
         exam_vocab_avg: float | None = None
@@ -99,6 +101,27 @@ class DashboardService:
                 streak = profile.data.get("streak_days") or 0
                 review_points = int(profile.data.get("review_points") or 0)
 
+            today_start = datetime.now(UTC).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ).isoformat()
+            vocab_today = (
+                self.db.table("user_vocab_progress")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .gte("last_reviewed_at", today_start)
+                .limit(1)
+                .execute()
+            )
+            grammar_today = (
+                self.db.table("user_grammar_progress")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .gte("last_reviewed_at", today_start)
+                .limit(1)
+                .execute()
+            )
+            reviewed_today = (vocab_today.count or 0) + (grammar_today.count or 0)
+
             exam_vocab_avg, exam_vocab_count = self._exam_avg(user_id, "vocab")
             exam_grammar_avg, exam_grammar_count = self._exam_avg(user_id, "grammar")
         else:
@@ -111,6 +134,7 @@ class DashboardService:
             vocab_due_count=vocab_due,
             grammar_due_count=grammar_due,
             streak_days=streak,
+            reviewed_today=reviewed_today,
             review_points=review_points,
             review_score_avg=review_score_avg,
             exam_vocab_avg=exam_vocab_avg,

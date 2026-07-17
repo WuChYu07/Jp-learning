@@ -391,6 +391,9 @@ class VocabService:
         snap = score_service.apply_rating(
             user_id, vocabulary_id, rating, progress_row=progress_row
         )
+        from app.services.review_activity_service import review_activity_service
+
+        streak_days = review_activity_service.record_review(user_id)
 
         return {
             "vocabulary_id": str(vocabulary_id),
@@ -402,6 +405,7 @@ class VocabService:
             "review_points": snap.review_points,
             "score_delta": snap.score_delta,
             "points_delta": snap.points_delta,
+            "streak_days": streak_days,
         }
 
     # ── Helpers ──────────────────────────────────────────────────────────────

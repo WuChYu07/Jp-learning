@@ -21,6 +21,35 @@ export default function DashboardPage() {
           歡迎回來
         </h1>
         <p className="mt-2 text-stone-600">今天也一起保持初心，穩步學習吧。</p>
+        {stats && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+            <div className="rounded-xl bg-orange-50 px-4 py-3 text-center ring-1 ring-orange-100">
+              <p className="text-2xl font-bold text-[var(--color-primary)]">
+                {stats.streak_days} 天
+              </p>
+              <p className="text-xs text-stone-500">連續複習</p>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm text-stone-600">
+                <span>今日目標</span>
+                <span>
+                  {stats.reviewed_today ?? 0} / {stats.daily_goal || 20} 張
+                </span>
+              </div>
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-stone-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-orange-300 to-[var(--color-primary)]"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      ((stats.reviewed_today ?? 0) / (stats.daily_goal || 20)) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         {error && <p className="mt-4 text-red-600">{error}</p>}
       </section>
 

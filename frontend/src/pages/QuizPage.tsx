@@ -115,6 +115,7 @@ function GenericFourChoiceQuiz({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [wrongIds, setWrongIds] = useState<string[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -125,6 +126,7 @@ function GenericFourChoiceQuiz({
     setSelected(null);
     setRevealed(false);
     setSaved(false);
+    setWrongIds([]);
     loadQuestions()
       .then(setQuestions)
       .catch((e: Error) => setError(e.message))
@@ -144,11 +146,12 @@ function GenericFourChoiceQuiz({
         mode: "4choice",
         correct_count: score,
         total_count: questions.length,
+        detail: { wrong_ids: wrongIds },
       })
       .catch(() => {
         /* non-blocking */
       });
-  }, [finished, saved, score, questions.length, subject]);
+  }, [finished, saved, score, questions.length, subject, wrongIds]);
 
   if (loading) return <LoadingCard />;
   if (error) return <ErrorCard message={error} />;
@@ -182,6 +185,11 @@ function GenericFourChoiceQuiz({
             />
           </div>
           <p className="mt-1 text-sm text-stone-500">正確率 {pct}%</p>
+          {wrongIds.length > 0 && (
+            <p className="mt-3 text-sm text-orange-700">
+              {wrongIds.length} 題錯題已加入複習佇列
+            </p>
+          )}
         </div>
         <div className="flex justify-center">
           <button
@@ -205,6 +213,8 @@ function GenericFourChoiceQuiz({
     setRevealed(true);
     if (optionId === q.correct_option_id) {
       setScore((s) => s + 1);
+    } else {
+      setWrongIds((ids) => (ids.includes(q.question_id) ? ids : [...ids, q.question_id]));
     }
   }
 
@@ -316,6 +326,7 @@ function TranslationQuiz() {
   const [scores, setScores] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [wrongIds, setWrongIds] = useState<string[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -326,6 +337,7 @@ function TranslationQuiz() {
     setScores([]);
     setFinished(false);
     setSaved(false);
+    setWrongIds([]);
     api
       .translationPrompts(5)
       .then((res) => setPrompts(res.prompts))
@@ -347,12 +359,12 @@ function TranslationQuiz() {
         mode: "translation",
         correct_count: correct,
         total_count: scores.length,
-        detail: { scores },
+        detail: { scores, wrong_ids: wrongIds },
       })
       .catch(() => {
         /* non-blocking */
       });
-  }, [finished, saved, scores]);
+  }, [finished, saved, scores, wrongIds]);
 
   if (loading) return <LoadingCard />;
   if (error) return <ErrorCard message={error} />;
@@ -376,6 +388,11 @@ function TranslationQuiz() {
             <span className="text-lg text-stone-400"> / 5</span>
           </p>
           <p className="text-sm text-stone-500">平均分數</p>
+          {wrongIds.length > 0 && (
+            <p className="mt-3 text-sm text-orange-700">
+              {wrongIds.length} 題需加強，已加入單字複習
+            </p>
+          )}
         </div>
         <div className="flex justify-center">
           <button
@@ -405,6 +422,11 @@ function TranslationQuiz() {
       );
       setResult(res);
       setScores((s) => [...s, res.score]);
+      if (res.score < 3) {
+        setWrongIds((ids) =>
+          ids.includes(prompt.question_id) ? ids : [...ids, prompt.question_id],
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "批改失敗");
     } finally {

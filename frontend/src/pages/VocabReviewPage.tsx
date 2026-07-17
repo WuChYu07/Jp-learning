@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import VocabRelationHints from "../components/VocabRelationHints";
 import { api, Vocabulary } from "../lib/api";
@@ -11,6 +12,18 @@ type SessionStats = {
   reviewed: number;
   known: number;
   unknown: number;
+  ratings: Record<"again" | "hard" | "good" | "easy", number>;
+  scoreDelta: number;
+  pointsDelta: number;
+};
+
+const EMPTY_STATS: SessionStats = {
+  reviewed: 0,
+  known: 0,
+  unknown: 0,
+  ratings: { again: 0, hard: 0, good: 0, easy: 0 },
+  scoreDelta: 0,
+  pointsDelta: 0,
 };
 
 /** Commute-friendly flashcard review mini-game. */
@@ -25,7 +38,7 @@ export default function VocabReviewPage() {
   const [nextOffset, setNextOffset] = useState(0);
   const [totalVocab, setTotalVocab] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<SessionStats>({ reviewed: 0, known: 0, unknown: 0 });
+  const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [lastDelta, setLastDelta] = useState<string | null>(null);
 
   const currentOffset = useRef(0);
@@ -56,7 +69,7 @@ export default function VocabReviewPage() {
 
   const current = cards[index];
 
-  async function handleRating(rating: string) {
+  async function handleRating(rating: "again" | "hard" | "good" | "easy") {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
@@ -76,6 +89,9 @@ export default function VocabReviewPage() {
         reviewed: s.reviewed + 1,
         known: s.known + (isKnown ? 1 : 0),
         unknown: s.unknown + (isKnown ? 0 : 1),
+        ratings: { ...s.ratings, [rating]: s.ratings[rating] + 1 },
+        scoreDelta: s.scoreDelta + sd,
+        pointsDelta: s.pointsDelta + pd,
       }));
 
       setFlipped(false);
@@ -96,7 +112,7 @@ export default function VocabReviewPage() {
   }
 
   function handleRestart() {
-    setStats({ reviewed: 0, known: 0, unknown: 0 });
+    setStats(EMPTY_STATS);
     loadBatch(0);
   }
 
@@ -157,6 +173,16 @@ export default function VocabReviewPage() {
             />
           </div>
           <p className="mt-1 text-sm text-stone-500">正確率 {pct}%</p>
+          <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+            <p className="rounded-lg bg-red-50 py-2 text-red-700">重來 {stats.ratings.again}</p>
+            <p className="rounded-lg bg-amber-50 py-2 text-amber-700">困難 {stats.ratings.hard}</p>
+            <p className="rounded-lg bg-emerald-50 py-2 text-emerald-700">良好 {stats.ratings.good}</p>
+            <p className="rounded-lg bg-sky-50 py-2 text-sky-700">簡單 {stats.ratings.easy}</p>
+          </div>
+          <p className="mt-3 text-sm font-medium text-[var(--color-primary-dark)]">
+            本輪熟練度 {stats.scoreDelta >= 0 ? "+" : ""}{stats.scoreDelta}
+            {" · "}總分 {stats.pointsDelta >= 0 ? "+" : ""}{stats.pointsDelta}
+          </p>
           <p className="mt-4 text-sm text-stone-400">資料庫共 {totalVocab} 個單字</p>
         </div>
 
@@ -220,12 +246,19 @@ export default function VocabReviewPage() {
         onFlip={() => setFlipped((f) => !f)}
         onSwipeLeft={() => handleRating("again")}
         onSwipeRight={() => handleRating("good")}
+        onRateHard={() => void handleRating("hard")}
+        onRateEasy={() => void handleRating("easy")}
         front={
           <>
             <p className="kanji-display text-7xl text-[var(--color-ink)]">{primary}</p>
             {secondary && (
               <p className="mt-5 text-3xl text-stone-500">{secondary}</p>
             )}
+            <SpeakButton
+              className="mt-6"
+              text={current!.reading || current!.word}
+              label={`播放「${current!.word}」的發音`}
+            />
           </>
         }
         back={

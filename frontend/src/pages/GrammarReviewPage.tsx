@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import { api, Grammar } from "../lib/api";
 
@@ -9,6 +10,18 @@ type SessionStats = {
   reviewed: number;
   known: number;
   unknown: number;
+  ratings: Record<"again" | "hard" | "good" | "easy", number>;
+  scoreDelta: number;
+  pointsDelta: number;
+};
+
+const EMPTY_STATS: SessionStats = {
+  reviewed: 0,
+  known: 0,
+  unknown: 0,
+  ratings: { again: 0, hard: 0, good: 0, easy: 0 },
+  scoreDelta: 0,
+  pointsDelta: 0,
 };
 
 export default function GrammarReviewPage() {
@@ -22,7 +35,7 @@ export default function GrammarReviewPage() {
   const [nextOffset, setNextOffset] = useState(0);
   const [totalGrammar, setTotalGrammar] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<SessionStats>({ reviewed: 0, known: 0, unknown: 0 });
+  const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [lastDelta, setLastDelta] = useState<string | null>(null);
 
   const loadBatch = useCallback((offset: number) => {
@@ -49,7 +62,7 @@ export default function GrammarReviewPage() {
 
   const current = cards[index];
 
-  async function handleRating(rating: string) {
+  async function handleRating(rating: "again" | "hard" | "good" | "easy") {
     if (!current || submitting) return;
     setSubmitting(true);
     try {
@@ -69,6 +82,9 @@ export default function GrammarReviewPage() {
         reviewed: s.reviewed + 1,
         known: s.known + (isKnown ? 1 : 0),
         unknown: s.unknown + (isKnown ? 0 : 1),
+        ratings: { ...s.ratings, [rating]: s.ratings[rating] + 1 },
+        scoreDelta: s.scoreDelta + sd,
+        pointsDelta: s.pointsDelta + pd,
       }));
 
       setFlipped(false);
@@ -133,6 +149,16 @@ export default function GrammarReviewPage() {
             </div>
           </div>
           <p className="mt-4 text-sm text-stone-500">熟悉率 {pct}%</p>
+          <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+            <p className="rounded-lg bg-red-50 py-2 text-red-700">重來 {stats.ratings.again}</p>
+            <p className="rounded-lg bg-amber-50 py-2 text-amber-700">困難 {stats.ratings.hard}</p>
+            <p className="rounded-lg bg-emerald-50 py-2 text-emerald-700">良好 {stats.ratings.good}</p>
+            <p className="rounded-lg bg-sky-50 py-2 text-sky-700">簡單 {stats.ratings.easy}</p>
+          </div>
+          <p className="mt-3 text-sm font-medium text-[var(--color-primary-dark)]">
+            本輪熟練度 {stats.scoreDelta >= 0 ? "+" : ""}{stats.scoreDelta}
+            {" · "}總分 {stats.pointsDelta >= 0 ? "+" : ""}{stats.pointsDelta}
+          </p>
           <p className="mt-1 text-sm text-stone-400">資料庫共 {totalGrammar} 個文法</p>
         </div>
         <div className="flex justify-center gap-3">
@@ -148,7 +174,7 @@ export default function GrammarReviewPage() {
           <button
             type="button"
             onClick={() => {
-              setStats({ reviewed: 0, known: 0, unknown: 0 });
+              setStats(EMPTY_STATS);
               loadBatch(0);
             }}
             className="rounded-full bg-stone-100 px-6 py-3 text-sm font-semibold text-stone-700"
@@ -198,6 +224,8 @@ export default function GrammarReviewPage() {
         onFlip={() => setFlipped((f) => !f)}
         onSwipeLeft={() => void handleRating("again")}
         onSwipeRight={() => void handleRating("good")}
+        onRateHard={() => void handleRating("hard")}
+        onRateEasy={() => void handleRating("easy")}
         front={
           <>
             <span className="mb-3 inline-block rounded-full bg-orange-50 px-3 py-0.5 text-sm text-orange-700">
@@ -206,6 +234,11 @@ export default function GrammarReviewPage() {
             <p className="kanji-display text-5xl text-[var(--color-ink)]">
               {current!.grammar_point}
             </p>
+            <SpeakButton
+              className="mt-5"
+              text={current!.grammar_point}
+              label={`播放「${current!.grammar_point}」的發音`}
+            />
             {usage?.semantic_concept && (
               <p className="mt-4 text-base text-stone-500">{usage.semantic_concept}</p>
             )}

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -12,6 +14,8 @@ from supabase import Client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.vocab import ExamAttemptCreate, ExamAttemptOut
 from app.services.score_service import score_service
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -311,6 +315,14 @@ class QuizService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to save exam attempt",
             )
+        try:
+            self._queue_wrong_answers(
+                user_id=user_id,
+                subject=payload.subject,
+                detail=payload.detail or {},
+            )
+        except Exception:
+            logger.exception("Failed to queue wrong quiz answers for review")
         return ExamAttemptOut(
             id=UUID(data["id"]),
             subject=data["subject"],
@@ -320,6 +332,72 @@ class QuizService:
             score_percent=float(data["score_percent"]),
             completed_at=str(data.get("completed_at") or ""),
         )
+
+    def _queue_wrong_answers(
+        self, *, user_id: str, subject: str, detail: dict
+    ) -> None:
+        """Make wrong quiz items immediately due without changing score/points."""
+        raw_ids = detail.get("wrong_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return
+
+        valid_uuid_strings: list[str] = []
+        for raw in raw_ids[:20]:
+            try:
+                valid_uuid_strings.append(str(UUID(str(raw))))
+            except (TypeError, ValueError):
+                continue
+        if not valid_uuid_strings:
+            return
+
+        entity_table = "vocabularies" if subject == "vocab" else "grammars"
+        entity_rows = (
+            self.db.table(entity_table)
+            .select("id")
+            .in_("id", valid_uuid_strings)
+            .execute()
+        ).data or []
+        entity_ids = [row["id"] for row in entity_rows]
+        if not entity_ids:
+            return
+
+        now_iso = datetime.now(UTC).isoformat()
+        if subject == "vocab":
+            progress_table = "user_vocab_progress"
+            entity_key = "vocabulary_id"
+        else:
+            progress_table = "user_grammar_progress"
+            entity_key = "grammar_id"
+
+        existing_rows = (
+            self.db.table(progress_table)
+            .select(entity_key)
+            .eq("user_id", user_id)
+            .in_(entity_key, entity_ids)
+            .execute()
+        ).data or []
+        existing_ids = {row[entity_key] for row in existing_rows}
+
+        if existing_ids:
+            (
+                self.db.table(progress_table)
+                .update({"next_review_date": now_iso})
+                .eq("user_id", user_id)
+                .in_(entity_key, list(existing_ids))
+                .execute()
+            )
+
+        new_rows = [
+            {
+                "user_id": user_id,
+                entity_key: entity_id,
+                "next_review_date": now_iso,
+            }
+            for entity_id in entity_ids
+            if entity_id not in existing_ids
+        ]
+        if new_rows:
+            self.db.table(progress_table).insert(new_rows).execute()
 
     def _build_question(
         self,

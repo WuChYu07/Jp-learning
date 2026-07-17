@@ -410,6 +410,9 @@ class GrammarService:
         snap = score_service.apply_grammar_rating(
             user_id, grammar_id, rating, progress_row=progress_row
         )
+        from app.services.review_activity_service import review_activity_service
+
+        streak_days = review_activity_service.record_review(user_id)
         return {
             "grammar_id": str(grammar_id),
             "rating": rating,
@@ -420,6 +423,7 @@ class GrammarService:
             "review_points": snap.review_points,
             "score_delta": snap.score_delta,
             "points_delta": snap.points_delta,
+            "streak_days": streak_days,
         }
 
     def _load_grammar_out(self, grammar_id: UUID) -> GrammarOut:

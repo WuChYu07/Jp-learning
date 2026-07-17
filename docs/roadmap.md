@@ -41,7 +41,6 @@
 | ID | 項目 | 狀態 | 說明 |
 |----|------|------|------|
 | P4 | 匯出／備份 | pending | JSON／CSV 匯出單字、文法、SRS 進度，方便自己備份（原 R10） |
-| P5 | 冷啟動體感 | pending | Render Free 喚醒提示（前端顯示「後端醒來中…」），減少以為壞掉 |
 
 ### 已完成
 
@@ -50,6 +49,10 @@
 | R1 | JLPT 分級補齊 | done | Upload「JLPT」preview → apply |
 | R2 | 單字例句／補充覆蓋 | done | Cursor 老師視角 gap-fill；primary defs 缺欄 = 0 |
 | R3 | 文法複習／測驗 | done | 文法閃卡 SRS + 文法四選一 |
+| P5 | 冷啟動體感 | done | Render 喚醒提示、連線重試與錯誤提示 |
+| F1 | 複習動機輕量包 | done | streak／每日 20 張目標、四檔評分、錯題回 SRS |
+| F2 | 日文發音 | done | Web Speech `ja-JP`；單字／文法詳情與複習卡可播放 |
+| UX1 | 庫頁先顯示列表 | done | 進單字／文法庫不再自動開第一筆；deep-link 仍可直達詳情 |
 
 ### 明確不做（個人用）
 

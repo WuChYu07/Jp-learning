@@ -286,6 +286,7 @@ export type DashboardStats = {
   grammar_due_count: number;
   streak_days: number;
   daily_goal: number;
+  reviewed_today: number;
   review_points: number;
   review_score_avg: number;
   exam_vocab_avg: number | null;

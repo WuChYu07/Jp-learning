@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import SpeakButton from "../components/SpeakButton";
 import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
 import VocabRelationHints from "../components/VocabRelationHints";
@@ -52,8 +53,7 @@ export default function VocabPage() {
       setItems((prev) => (append ? [...prev, ...res.items] : res.items));
       if (!append) {
         const navId = (location.state as { vocabularyId?: string } | null)?.vocabularyId;
-        const firstId = navId || res.items[0]?.id || null;
-        setSelectedId(firstId);
+        setSelectedId(navId || null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "載入失敗");
@@ -381,7 +381,10 @@ function VocabDetail({
             <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-stone-400">
               發音
             </p>
-            <p className="mt-1 text-xl text-stone-600">{secondary || vocab.reading || "—"}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <p className="text-xl text-stone-600">{secondary || vocab.reading || "—"}</p>
+              <SpeakButton text={vocab.reading || vocab.word} label={`播放「${vocab.word}」的發音`} />
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
