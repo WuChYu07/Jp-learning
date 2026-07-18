@@ -48,6 +48,7 @@ export default function VocabPage() {
     try {
       const res = await api.listVocab({
         jlpt: jlpt || undefined,
+        q: query.trim() || undefined,
         limit: PAGE_SIZE,
         offset,
       });
@@ -65,11 +66,14 @@ export default function VocabPage() {
     }
   };
 
-  // List only reloads when JLPT filter changes — not on relation navigation.
+  // Reload when JLPT or search query changes (debounced for typing).
   useEffect(() => {
-    void loadList(0, false);
+    const timer = window.setTimeout(() => {
+      void loadList(0, false);
+    }, query.trim() ? 280 : 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jlpt]);
+  }, [jlpt, query]);
 
   // Relation chip / deep-link: update selection without refetching the list.
   useEffect(() => {
@@ -136,6 +140,7 @@ export default function VocabPage() {
   }
 
   const filtered = useMemo(() => {
+    // Server already filters by q; keep a light client pass for meaning_zh edge cases.
     const q = query.trim().toLowerCase();
     if (!q) return items;
     return items.filter((v) => {

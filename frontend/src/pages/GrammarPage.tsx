@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
@@ -17,6 +17,8 @@ import {
   formatUserFacingError,
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
+
+const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1"] as const;
 
 function toGrammarSummary(g: Grammar): GrammarSummary {
   return {
@@ -68,6 +70,8 @@ export default function GrammarPage() {
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
   const loadHint = useSlowLoadHint(listLoading);
+  const [query, setQuery] = useState("");
+  const [jlpt, setJlpt] = useState("");
   const [nextLoading, setNextLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [explaining, setExplaining] = useState(false);
@@ -111,20 +115,27 @@ export default function GrammarPage() {
     return () => observer.disconnect();
   }, [selected]);
 
-  // List once on mount (not on every location.state change).
+  // List reloads when JLPT / search changes (debounced).
   useEffect(() => {
     const navId = (location.state as { grammarId?: string } | null)?.grammarId;
-    setListLoading(true);
-    api
-      .listGrammar({ limit: 100 })
-      .then((res) => {
-        setItems(res.items);
-        setSelectedId(navId || null);
-      })
-      .catch((err: unknown) => setError(formatUserFacingError(err)))
-      .finally(() => setListLoading(false));
+    const timer = window.setTimeout(() => {
+      setListLoading(true);
+      api
+        .listGrammar({
+          limit: 100,
+          jlpt: jlpt || undefined,
+          q: query.trim() || undefined,
+        })
+        .then((res) => {
+          setItems(res.items);
+          if (navId) setSelectedId(navId);
+        })
+        .catch((err: unknown) => setError(formatUserFacingError(err)))
+        .finally(() => setListLoading(false));
+    }, query.trim() ? 280 : 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [jlpt, query]);
 
   // Deep-link / in-page navigation via location.state.
   useEffect(() => {
@@ -173,6 +184,7 @@ export default function GrammarPage() {
     try {
       const next = await api.randomGrammar({
         exclude_id: selectedId || undefined,
+        jlpt: jlpt || undefined,
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
       closeEditor();
@@ -312,6 +324,16 @@ export default function GrammarPage() {
     }
   }
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (item) =>
+        item.grammar_point.toLowerCase().includes(q) ||
+        item.jlpt_level.toLowerCase().includes(q),
+    );
+  }, [items, query]);
+
   return (
     <div className="space-y-6">
       <div className={`flex flex-wrap items-center justify-between gap-3 ${selectedId ? "hidden md:flex" : ""}`}>
@@ -332,6 +354,32 @@ export default function GrammarPage() {
           </button>
         </div>
       </div>
+
+      <div className={`flex flex-wrap items-center gap-2 ${selectedId ? "hidden md:flex" : ""}`}>
+        <select
+          value={jlpt}
+          onChange={(e) => setJlpt(e.target.value)}
+          className="rounded-full bg-white px-4 py-2 text-sm ring-1 ring-orange-100"
+        >
+          <option value="">全部 JLPT</option>
+          {JLPT_FILTERS.filter(Boolean).map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜尋文法（如 てしまう、つもり）…"
+          className="min-w-[180px] flex-1 rounded-full bg-white px-4 py-2 text-sm ring-1 ring-orange-100"
+        />
+        <p className="text-xs text-stone-400">
+          {filtered.length}
+          {query ? ` / ${items.length}` : ""} 筆
+        </p>
+      </div>
+
       {error && <p className="text-red-600">{error}</p>}
       {listLoading && (
         <div className="rounded-2xl bg-amber-50 px-4 py-6 text-center ring-1 ring-amber-200">
@@ -349,7 +397,7 @@ export default function GrammarPage() {
             selectedId ? "hidden md:block" : "block"
           }`}
         >
-          {items.map((item) => (
+          {filtered.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -373,8 +421,10 @@ export default function GrammarPage() {
               </p>
             </button>
           ))}
-          {items.length === 0 && !error && (
-            <p className="py-8 text-center text-sm text-stone-400">目前沒有文法資料</p>
+          {filtered.length === 0 && !error && (
+            <p className="py-8 text-center text-sm text-stone-400">
+              {query.trim() ? "沒有符合的文法" : "目前沒有文法資料"}
+            </p>
           )}
         </div>
 

@@ -475,9 +475,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   dashboardStats: () => request<DashboardStats>("/api/v1/dashboard/stats"),
-  listVocab: (params?: { jlpt?: string; limit?: number; offset?: number }) => {
+  listVocab: (params?: { jlpt?: string; q?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.jlpt) q.set("jlpt", params.jlpt);
+    if (params?.q) q.set("q", params.q);
     if (params?.limit) q.set("limit", String(params.limit));
     if (params?.offset) q.set("offset", String(params.offset));
     const qs = q.toString();
@@ -521,9 +522,10 @@ export const api = {
   },
   recordVocabView: (id: string) =>
     request<ReviewScoreResult>(`/api/v1/vocab/${id}/view`, { method: "POST" }),
-  listGrammar: (params?: { jlpt?: string; limit?: number }) => {
+  listGrammar: (params?: { jlpt?: string; q?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.jlpt) q.set("jlpt", params.jlpt);
+    if (params?.q) q.set("q", params.q);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return request<{ items: GrammarSummary[]; total: number }>(

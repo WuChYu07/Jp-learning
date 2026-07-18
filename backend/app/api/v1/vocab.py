@@ -37,10 +37,11 @@ class ReviewSubmitRequest(BaseModel):
 @router.get("", response_model=VocabListResponse)
 def list_vocabulary(
     jlpt: JlptLevel | None = None,
+    q: str | None = Query(default=None, description="Search word / reading"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> VocabListResponse:
-    items, total = vocab_service.list_vocab(jlpt=jlpt, limit=limit, offset=offset)
+    items, total = vocab_service.list_vocab(jlpt=jlpt, limit=limit, offset=offset, q=q)
     return VocabListResponse(items=items, total=total, limit=limit, offset=offset)
 
 

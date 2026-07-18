@@ -38,10 +38,13 @@ class GrammarReviewSubmitRequest(BaseModel):
 @router.get("", response_model=GrammarListResponse)
 def list_grammar(
     jlpt: JlptLevel | None = None,
+    q: str | None = Query(default=None, description="Search grammar_point"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> GrammarListResponse:
-    items, total = grammar_service.list_grammar(jlpt=jlpt, limit=limit, offset=offset)
+    items, total = grammar_service.list_grammar(
+        jlpt=jlpt, limit=limit, offset=offset, q=q
+    )
     return GrammarListResponse(items=items, total=total, limit=limit, offset=offset)
 
 

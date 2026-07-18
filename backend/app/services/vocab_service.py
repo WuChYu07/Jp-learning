@@ -41,12 +41,18 @@ class VocabService:
         jlpt: JlptLevel | None = None,
         limit: int = 50,
         offset: int = 0,
+        q: str | None = None,
     ) -> tuple[list[VocabularySummary], int]:
         query = self.db.table("vocabularies").select(
             "id, word, reading, jlpt_level", count="exact"
         )
         if jlpt:
             query = query.eq("jlpt_level", jlpt.value)
+        needle = (q or "").strip()
+        if needle:
+            # PostgREST or-filter: word OR reading contains needle
+            safe = needle.replace(",", " ").replace("%", "")
+            query = query.or_(f"word.ilike.%{safe}%,reading.ilike.%{safe}%")
         result = query.order("word").range(offset, offset + limit - 1).execute()
         rows = result.data or []
         if not rows:
@@ -76,6 +82,16 @@ class VocabService:
             )
             for row in rows
         ]
+        # Extra client-side pass: also match meaning_zh when searching
+        if needle:
+            lower = needle.lower()
+            items = [
+                item
+                for item in items
+                if lower in item.word.lower()
+                or lower in (item.reading or "").lower()
+                or lower in (item.meaning_zh or "").lower()
+            ]
         return items, result.count or len(items)
 
     def get_vocab(

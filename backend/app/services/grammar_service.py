@@ -77,6 +77,7 @@ class GrammarService:
         jlpt: JlptLevel | None = None,
         limit: int = 50,
         offset: int = 0,
+        q: str | None = None,
     ) -> tuple[list[GrammarSummary], int]:
         query = (
             self.db.table("grammars")
@@ -88,6 +89,10 @@ class GrammarService:
         )
         if jlpt:
             query = query.ilike("jlpt_level", f"%{jlpt.value}%")
+        needle = (q or "").strip()
+        if needle:
+            safe = needle.replace(",", " ").replace("%", "")
+            query = query.ilike("grammar_point", f"%{safe}%")
         result = query.order("grammar_point").range(offset, offset + limit - 1).execute()
         rows = result.data or []
         if not rows:
