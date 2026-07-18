@@ -696,38 +696,62 @@ function UsageNavigator({
   activeIndex: number;
   onSelect: (index: number) => void;
 }) {
+  const [open, setOpen] = useState(true);
+
+  // New grammar selection: expand again so tags are easy to reach.
+  useEffect(() => {
+    setOpen(true);
+  }, [usages.map((u) => u.id).join("|")]);
+
   return (
-    <div className="sticky top-2 z-10 rounded-2xl bg-white/95 p-4 shadow-sm ring-1 ring-orange-200 backdrop-blur">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="sticky top-2 z-10 rounded-2xl bg-white/95 shadow-sm ring-1 ring-orange-200 backdrop-blur">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-orange-50/60"
+      >
         <p className="text-sm font-bold text-[var(--color-primary-dark)]">
           此文法有 {usages.length} 個用法
         </p>
-        <p className="text-xs text-stone-500">點選標籤可跳轉</p>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {usages.map((usage, index) => {
-          const accent = USAGE_ACCENTS[index % USAGE_ACCENTS.length];
-          const label = usageNavLabel(usage, index);
-          return (
-            <button
-              key={usage.id}
-              type="button"
-              data-active={activeIndex === index}
-              onClick={() => onSelect(index)}
-              className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-left text-sm font-semibold ring-1 transition bg-stone-50 text-stone-700 hover:bg-orange-50 ${accent.tab}`}
-            >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  activeIndex === index ? "bg-white/25 text-white" : accent.badge
-                }`}
-              >
-                {index + 1}
-              </span>
-              <span className="truncate">{label}</span>
-            </button>
-          );
-        })}
-      </div>
+        <span className="flex items-center gap-2 text-xs text-stone-500">
+          <span className="hidden sm:inline">{open ? "點選標籤可跳轉" : "點此展開"}</span>
+          <span
+            aria-hidden
+            className={`inline-block text-stone-400 transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            ▾
+          </span>
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-orange-100 px-4 pb-4 pt-3">
+          <div className="flex flex-wrap gap-2">
+            {usages.map((usage, index) => {
+              const accent = USAGE_ACCENTS[index % USAGE_ACCENTS.length];
+              const label = usageNavLabel(usage, index);
+              return (
+                <button
+                  key={usage.id}
+                  type="button"
+                  data-active={activeIndex === index}
+                  onClick={() => onSelect(index)}
+                  className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-left text-sm font-semibold ring-1 transition bg-stone-50 text-stone-700 hover:bg-orange-50 ${accent.tab}`}
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      activeIndex === index ? "bg-white/25 text-white" : accent.badge
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
