@@ -4,6 +4,7 @@ import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
 import GrammarRelationSection from "../components/GrammarRelationSection";
 import SpeakButton from "../components/SpeakButton";
+import SwipeNavigate from "../components/SwipeNavigate";
 import {
   api,
   Grammar,
@@ -67,6 +68,7 @@ export default function GrammarPage() {
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
   const loadHint = useSlowLoadHint(listLoading);
+  const [nextLoading, setNextLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -163,6 +165,34 @@ export default function GrammarPage() {
       cancelled = true;
     };
   }, [selectedId]);
+
+  async function goNextRandom() {
+    if (nextLoading || editorMode !== "view") return;
+    setNextLoading(true);
+    setError("");
+    try {
+      const next = await api.randomGrammar({
+        exclude_id: selectedId || undefined,
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      closeEditor();
+      setSelectedId(next.id);
+      setSelected(next);
+      setItems((prev) => {
+        const summary = toGrammarSummary(next);
+        if (prev.some((x) => x.id === next.id)) {
+          return prev.map((x) => (x.id === next.id ? { ...x, ...summary } : x));
+        }
+        return [...prev, summary].sort((a, b) =>
+          a.grammar_point.localeCompare(b.grammar_point, "ja"),
+        );
+      });
+    } catch (err) {
+      setError(formatUserFacingError(err));
+    } finally {
+      setNextLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -376,7 +406,25 @@ export default function GrammarPage() {
           )}
 
           {selected && (
+          <SwipeNavigate
+            onSwipeRight={() => void goNextRandom()}
+            disabled={nextLoading || editorMode !== "view"}
+            hint="右滑或按上方按鈕 → 下一個文法（低分優先）"
+          >
           <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-stone-500">
+                瀏覽詳情時可右滑切換下一筆
+              </p>
+              <button
+                type="button"
+                disabled={nextLoading || editorMode !== "view"}
+                onClick={() => void goNextRandom()}
+                className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {nextLoading ? "載入中…" : "下一個（低分優先）→"}
+              </button>
+            </div>
             <div className="rounded-2xl bg-white p-5 ring-1 ring-orange-100 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -512,6 +560,7 @@ export default function GrammarPage() {
                 />
               ))}
           </div>
+          </SwipeNavigate>
           )}
         </div>
       </div>

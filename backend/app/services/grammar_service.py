@@ -136,6 +136,44 @@ class GrammarService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grammar not found")
         return self._load_grammar_out(grammar_id)
 
+    def random_grammar(
+        self,
+        user_id: str | None,
+        *,
+        exclude_id: UUID | None = None,
+        jlpt: JlptLevel | None = None,
+    ) -> GrammarOut:
+        query = (
+            self.db.table("grammars")
+            .select("id")
+            .neq("sync_status", "archived")
+        )
+        if jlpt:
+            query = query.eq("jlpt_level", jlpt.value)
+        rows = (query.execute()).data or []
+        ids = [r["id"] for r in rows]
+        if not ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No grammar available",
+            )
+
+        exclude = {str(exclude_id)} if exclude_id else set()
+        score_map = (
+            score_service.grammar_score_map_for_user(user_id) if user_id else {}
+        )
+        picked = score_service.weighted_sample_ids(
+            ids, score_map, count=1, exclude_ids=exclude
+        )
+        if not picked and exclude:
+            picked = score_service.weighted_sample_ids(ids, score_map, count=1)
+        if not picked:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No grammar available",
+            )
+        return self.get_grammar(UUID(picked[0]))
+
     def create_grammar(self, payload: GrammarWriteInput) -> GrammarOut:
         point = clean_text(payload.grammar_point) or payload.grammar_point.strip()
         entry_hash = grammar_entry_hash(point)

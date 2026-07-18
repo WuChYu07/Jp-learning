@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
@@ -54,6 +55,27 @@ class QuizBatch:
 @dataclass
 class TranslationBatch:
     prompts: list[TranslationPrompt]
+    total_available: int
+
+
+@dataclass
+class ClozeQuestion:
+    question_id: str
+    subject: str  # vocab | grammar
+    entity_id: str
+    sentence_blanked: str
+    sentence_full: str
+    sentence_reading: str | None
+    sentence_zh: str | None
+    blank_answer: str
+    prompt: str
+    options: list[ChoiceOption] = field(default_factory=list)
+    correct_option_id: str = ""
+
+
+@dataclass
+class ClozeBatch:
+    questions: list[ClozeQuestion]
     total_available: int
 
 
@@ -285,6 +307,203 @@ class QuizService:
 
         return TranslationBatch(prompts=prompts, total_available=len(candidates))
 
+    def generate_cloze(
+        self,
+        count: int = 10,
+        user_id: str | None = None,
+        subject: str = "both",
+    ) -> ClozeBatch:
+        """Build fill-in-the-blank MCQs from stored example sentences."""
+        candidates: list[dict] = []
+        if subject in {"vocab", "both"}:
+            candidates.extend(self._cloze_vocab_candidates())
+        if subject in {"grammar", "both"}:
+            candidates.extend(self._cloze_grammar_candidates())
+
+        if len(candidates) < 2:
+            return ClozeBatch(questions=[], total_available=len(candidates))
+
+        # Weight by entity score when possible
+        entity_ids = list({c["entity_id"] for c in candidates})
+        score_map: dict[str, float] = {}
+        if user_id:
+            if subject == "grammar":
+                score_map = score_service.grammar_score_map_for_user(user_id)
+            elif subject == "vocab":
+                score_map = score_service.score_map_for_user(user_id)
+            else:
+                score_map = {
+                    **score_service.score_map_for_user(user_id),
+                    **score_service.grammar_score_map_for_user(user_id),
+                }
+
+        sample_size = min(count, len(entity_ids))
+        picked_ids = score_service.weighted_sample_ids(
+            entity_ids, score_map, count=sample_size
+        )
+        by_entity: dict[str, list[dict]] = {}
+        for c in candidates:
+            by_entity.setdefault(c["entity_id"], []).append(c)
+
+        selected: list[dict] = []
+        for eid in picked_ids:
+            opts = by_entity.get(eid) or []
+            if opts:
+                selected.append(random.choice(opts))
+
+        # Distractor pools by subject
+        vocab_answers = list(
+            {
+                c["blank_answer"]
+                for c in candidates
+                if c["subject"] == "vocab" and c.get("blank_answer")
+            }
+        )
+        grammar_answers = list(
+            {
+                c["blank_answer"]
+                for c in candidates
+                if c["subject"] == "grammar" and c.get("blank_answer")
+            }
+        )
+
+        questions: list[ClozeQuestion] = []
+        for c in selected:
+            pool = vocab_answers if c["subject"] == "vocab" else grammar_answers
+            q = self._build_cloze_question(c, pool)
+            if q:
+                questions.append(q)
+
+        return ClozeBatch(questions=questions, total_available=len(candidates))
+
+    def _cloze_vocab_candidates(self) -> list[dict]:
+        vocab_rows = (
+            self.db.table("vocabularies").select("id, word, reading").execute()
+        ).data or []
+        vocab_map = {v["id"]: v for v in vocab_rows}
+        defs = (
+            self.db.table("vocabulary_definitions")
+            .select("vocabulary_id, example_sentences")
+            .order("sort_order")
+            .execute()
+        ).data or []
+
+        out: list[dict] = []
+        for d in defs:
+            vocab = vocab_map.get(d["vocabulary_id"])
+            if not vocab:
+                continue
+            word = (vocab.get("word") or "").strip()
+            for s in d.get("example_sentences") or []:
+                if not isinstance(s, dict):
+                    continue
+                japanese = (s.get("japanese") or "").strip()
+                if not japanese:
+                    continue
+                blank = _find_blank_span(
+                    japanese,
+                    explicit=(s.get("highlight") or "").strip() or None,
+                    fallback=word,
+                )
+                if not blank:
+                    continue
+                start, end, answer = blank
+                blanked = japanese[:start] + "____" + japanese[end:]
+                out.append(
+                    {
+                        "subject": "vocab",
+                        "entity_id": vocab["id"],
+                        "sentence_full": japanese,
+                        "sentence_blanked": blanked,
+                        "sentence_reading": s.get("reading"),
+                        "sentence_zh": s.get("chinese"),
+                        "blank_answer": answer,
+                    }
+                )
+        return out
+
+    def _cloze_grammar_candidates(self) -> list[dict]:
+        grammars = (
+            self.db.table("grammars")
+            .select("id, grammar_point")
+            .neq("sync_status", "archived")
+            .execute()
+        ).data or []
+        gmap = {g["id"]: g for g in grammars}
+        usages = (
+            self.db.table("grammar_usages")
+            .select("grammar_id, example_sentences")
+            .order("sort_order")
+            .execute()
+        ).data or []
+
+        out: list[dict] = []
+        for u in usages:
+            grammar = gmap.get(u["grammar_id"])
+            if not grammar:
+                continue
+            point = (grammar.get("grammar_point") or "").strip()
+            for s in u.get("example_sentences") or []:
+                if not isinstance(s, dict):
+                    continue
+                japanese = (s.get("japanese") or "").strip()
+                if not japanese:
+                    continue
+                blank = _find_blank_span(
+                    japanese,
+                    explicit=(s.get("highlight") or "").strip() or None,
+                    fallback=point,
+                )
+                if not blank:
+                    continue
+                start, end, answer = blank
+                blanked = japanese[:start] + "____" + japanese[end:]
+                out.append(
+                    {
+                        "subject": "grammar",
+                        "entity_id": grammar["id"],
+                        "sentence_full": japanese,
+                        "sentence_blanked": blanked,
+                        "sentence_reading": s.get("reading"),
+                        "sentence_zh": s.get("chinese"),
+                        "blank_answer": answer,
+                    }
+                )
+        return out
+
+    def _build_cloze_question(
+        self, candidate: dict, distractor_pool: list[str]
+    ) -> ClozeQuestion | None:
+        answer = candidate["blank_answer"]
+        distractors = [
+            d for d in distractor_pool if d and d != answer and "____" not in d
+        ]
+        unique = list(dict.fromkeys(distractors))
+        if len(unique) < 1:
+            return None
+        num = min(3, len(unique))
+        chosen = random.sample(unique, num)
+        options: list[ChoiceOption] = [ChoiceOption(id="correct", text=answer)]
+        for j, d in enumerate(chosen):
+            options.append(ChoiceOption(id=f"d{j}", text=d))
+        while len(options) < 4:
+            options.append(ChoiceOption(id=f"pad{len(options)}", text="—"))
+        random.shuffle(options)
+        correct_id = next(o.id for o in options if o.text == answer)
+        return ClozeQuestion(
+            question_id=candidate["entity_id"],
+            subject=candidate["subject"],
+            entity_id=candidate["entity_id"],
+            sentence_blanked=candidate["sentence_blanked"],
+            sentence_full=candidate["sentence_full"],
+            sentence_reading=candidate.get("sentence_reading"),
+            sentence_zh=candidate.get("sentence_zh"),
+            blank_answer=answer,
+            prompt="選出填入空格的正確答案",
+            options=options,
+            correct_option_id=correct_id,
+        )
+
     def save_exam_attempt(
         self, user_id: str | None, payload: ExamAttemptCreate
     ) -> ExamAttemptOut:
@@ -454,3 +673,43 @@ class QuizService:
 
 
 quiz_service = QuizService()
+
+
+def _find_blank_span(
+    japanese: str,
+    *,
+    explicit: str | None,
+    fallback: str,
+) -> tuple[int, int, str] | None:
+    """Return (start, end, answer_text) for cloze blanking."""
+    if explicit:
+        idx = japanese.find(explicit)
+        if idx >= 0:
+            return idx, idx + len(explicit), explicit
+
+    candidates = _blank_candidates(fallback)
+    for needle in candidates:
+        idx = japanese.find(needle)
+        if idx >= 0:
+            return idx, idx + len(needle), needle
+    return None
+
+
+def _blank_candidates(raw: str) -> list[str]:
+    stripped = (
+        raw.replace("〜", "")
+        .replace("～", "")
+        .replace("~", "")
+        .strip()
+    )
+    # Drop parenthetical notes: つもりだ（過去）
+    no_paren = re.sub(r"[（(].*?[）)]", "", stripped).strip()
+    # Take first alternative before ／
+    core = no_paren.split("／")[0].split("/")[0].strip()
+    out: list[str] = []
+    for c in (raw.strip(), stripped, no_paren, core):
+        if c and c not in out and len(c) >= 1:
+            out.append(c)
+    # Longer first for better match
+    out.sort(key=len, reverse=True)
+    return out

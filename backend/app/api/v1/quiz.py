@@ -51,6 +51,25 @@ class TranslationBatchOut(BaseModel):
     total_available: int
 
 
+class ClozeQuestionOut(BaseModel):
+    question_id: str
+    subject: str
+    entity_id: str
+    sentence_blanked: str
+    sentence_full: str
+    sentence_reading: str | None = None
+    sentence_zh: str | None = None
+    blank_answer: str
+    prompt: str
+    options: list[ChoiceOptionOut]
+    correct_option_id: str
+
+
+class ClozeBatchOut(BaseModel):
+    questions: list[ClozeQuestionOut]
+    total_available: int
+
+
 class TranslationGradeRequest(BaseModel):
     source_zh: str = Field(description="Original Chinese sentence")
     user_answer: str = Field(description="User's Japanese translation")
@@ -101,6 +120,34 @@ def get_grammar_4choice_quiz(
                 reading=q.reading,
                 prompt=q.prompt,
                 mode=q.mode,
+                options=[ChoiceOptionOut(id=o.id, text=o.text) for o in q.options],
+                correct_option_id=q.correct_option_id,
+            )
+            for q in batch.questions
+        ],
+        total_available=batch.total_available,
+    )
+
+
+@router.get("/cloze", response_model=ClozeBatchOut)
+def get_cloze_quiz(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+    count: int = Query(default=10, ge=1, le=20),
+    subject: str = Query(default="both", pattern="^(vocab|grammar|both)$"),
+) -> ClozeBatchOut:
+    batch = quiz_service.generate_cloze(count, user_id=user_id, subject=subject)
+    return ClozeBatchOut(
+        questions=[
+            ClozeQuestionOut(
+                question_id=q.question_id,
+                subject=q.subject,
+                entity_id=q.entity_id,
+                sentence_blanked=q.sentence_blanked,
+                sentence_full=q.sentence_full,
+                sentence_reading=q.sentence_reading,
+                sentence_zh=q.sentence_zh,
+                blank_answer=q.blank_answer,
+                prompt=q.prompt,
                 options=[ChoiceOptionOut(id=o.id, text=o.text) for o in q.options],
                 correct_option_id=q.correct_option_id,
             )

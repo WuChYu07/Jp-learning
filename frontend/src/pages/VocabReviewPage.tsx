@@ -256,8 +256,10 @@ export default function VocabReviewPage() {
             )}
             <SpeakButton
               className="mt-6"
+              size="lg"
               text={current!.reading || current!.word}
               label={`播放「${current!.word}」的發音`}
+              caption="點我發音"
             />
           </>
         }
@@ -271,7 +273,15 @@ export default function VocabReviewPage() {
             <p className="text-4xl font-semibold text-[var(--color-primary-dark)]">{meaning}</p>
             {example && (
               <div className="mt-8 space-y-2 text-left text-base text-stone-600">
-                <p className="font-medium">{example.japanese}</p>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="min-w-0 flex-1 font-medium">{example.japanese}</p>
+                  <SpeakButton
+                    size="sm"
+                    text={example.japanese}
+                    label="播放例句發音"
+                    caption="播例句"
+                  />
+                </div>
                 {example.reading && (
                   <p className="text-sm text-stone-400">{example.reading}</p>
                 )}

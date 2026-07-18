@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import SpeakButton from "../components/SpeakButton";
 import {
   api,
+  ClozeQuestion,
   FourChoiceQuestion,
   TranslationGradeResult,
   TranslationPrompt,
 } from "../lib/api";
 
-type QuizMode = "4choice" | "grammar" | "translation";
+type QuizMode = "4choice" | "grammar" | "cloze" | "translation";
 
 export default function QuizPage() {
   const [mode, setMode] = useState<QuizMode>("4choice");
@@ -29,6 +31,9 @@ export default function QuizPage() {
           >
             文法四選一
           </TabButton>
+          <TabButton active={mode === "cloze"} onClick={() => setMode("cloze")}>
+            例句挖空
+          </TabButton>
           <TabButton
             active={mode === "translation"}
             onClick={() => setMode("translation")}
@@ -40,6 +45,7 @@ export default function QuizPage() {
 
       {mode === "4choice" && <FourChoiceQuiz />}
       {mode === "grammar" && <GrammarFourChoiceQuiz />}
+      {mode === "cloze" && <ClozeQuiz />}
       {mode === "translation" && <TranslationQuiz />}
     </div>
   );
@@ -302,6 +308,253 @@ function GenericFourChoiceQuiz({
             type="button"
             onClick={handleNext}
             className="rounded-full bg-[var(--color-primary)] px-8 py-2.5 text-sm font-semibold text-white transition hover:shadow-md active:scale-95"
+          >
+            {index + 1 < questions.length ? "下一題" : "查看結果"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cloze Quiz (blank target word/grammar in example sentences)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ClozeQuiz() {
+  const [questions, setQuestions] = useState<ClozeQuestion[]>([]);
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [wrongVocab, setWrongVocab] = useState<string[]>([]);
+  const [wrongGrammar, setWrongGrammar] = useState<string[]>([]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError("");
+    setIndex(0);
+    setScore(0);
+    setFinished(false);
+    setSelected(null);
+    setRevealed(false);
+    setSaved(false);
+    setWrongVocab([]);
+    setWrongGrammar([]);
+    api
+      .quizCloze(10, "both")
+      .then((r) => setQuestions(r.questions))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!finished || saved || questions.length === 0) return;
+    setSaved(true);
+    const jobs: Promise<unknown>[] = [];
+    if (wrongVocab.length > 0 || questions.some((q) => q.subject === "vocab")) {
+      const vocabTotal = questions.filter((q) => q.subject === "vocab").length;
+      const vocabCorrect = vocabTotal - wrongVocab.length;
+      if (vocabTotal > 0) {
+        jobs.push(
+          api.submitQuizResult({
+            subject: "vocab",
+            mode: "cloze",
+            correct_count: Math.max(0, vocabCorrect),
+            total_count: vocabTotal,
+            detail: { wrong_ids: wrongVocab },
+          }),
+        );
+      }
+    }
+    if (
+      wrongGrammar.length > 0 ||
+      questions.some((q) => q.subject === "grammar")
+    ) {
+      const grammarTotal = questions.filter((q) => q.subject === "grammar").length;
+      const grammarCorrect = grammarTotal - wrongGrammar.length;
+      if (grammarTotal > 0) {
+        jobs.push(
+          api.submitQuizResult({
+            subject: "grammar",
+            mode: "cloze",
+            correct_count: Math.max(0, grammarCorrect),
+            total_count: grammarTotal,
+            detail: { wrong_ids: wrongGrammar },
+          }),
+        );
+      }
+    }
+    void Promise.all(jobs).catch(() => {
+      /* non-blocking */
+    });
+  }, [finished, saved, questions, wrongVocab, wrongGrammar]);
+
+  if (loading) return <LoadingCard />;
+  if (error) return <ErrorCard message={error} />;
+  if (questions.length === 0) {
+    return <EmptyCard text="資料庫中沒有足夠帶例句的單字／文法可出挖空題" />;
+  }
+
+  if (finished) {
+    const pct = Math.round((score / questions.length) * 100);
+    const wrongCount = wrongVocab.length + wrongGrammar.length;
+    return (
+      <div className="batch-complete-enter mx-auto max-w-lg space-y-6">
+        <div className="rounded-3xl bg-white p-8 text-center shadow-lg ring-1 ring-orange-100">
+          <p className="text-4xl">{pct >= 80 ? "🎉" : pct >= 50 ? "💪" : "📖"}</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--color-primary-dark)]">
+            例句挖空完成！
+          </h2>
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-3xl font-bold text-emerald-600">{score}</p>
+              <p className="text-xs text-stone-500">答對</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-red-500">
+                {questions.length - score}
+              </p>
+              <p className="text-xs text-stone-500">答錯</p>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-stone-500">正確率 {pct}%</p>
+          {wrongCount > 0 && (
+            <p className="mt-3 text-sm text-orange-700">
+              {wrongCount} 題錯題已加入複習佇列
+            </p>
+          )}
+        </div>
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={load}
+            className="rounded-full bg-[var(--color-primary)] px-8 py-3 text-sm font-semibold text-white shadow-md"
+          >
+            再測一次
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const q = questions[index];
+  const progress = ((index + 1) / questions.length) * 100;
+
+  function handleSelect(optionId: string) {
+    if (revealed) return;
+    setSelected(optionId);
+    setRevealed(true);
+    if (optionId === q.correct_option_id) {
+      setScore((s) => s + 1);
+    } else if (q.subject === "grammar") {
+      setWrongGrammar((ids) =>
+        ids.includes(q.entity_id) ? ids : [...ids, q.entity_id],
+      );
+    } else {
+      setWrongVocab((ids) =>
+        ids.includes(q.entity_id) ? ids : [...ids, q.entity_id],
+      );
+    }
+  }
+
+  function handleNext() {
+    setSelected(null);
+    setRevealed(false);
+    if (index + 1 < questions.length) setIndex(index + 1);
+    else setFinished(true);
+  }
+
+  return (
+    <div className="mx-auto max-w-lg space-y-6">
+      <div className="space-y-1">
+        <div className="flex justify-between px-1 text-xs text-stone-500">
+          <span>
+            第 {index + 1} / {questions.length} 題
+          </span>
+          <span>{Math.round(progress)}%</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-stone-100">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-orange-300 to-[var(--color-primary)] transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-3xl bg-white p-8 shadow-lg ring-1 ring-orange-100">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-block rounded-full bg-violet-50 px-3 py-0.5 text-xs font-semibold text-violet-700">
+            {q.subject === "grammar" ? "文法挖空" : "單字挖空"}
+          </span>
+          <SpeakButton
+            size="sm"
+            text={revealed ? q.sentence_full : q.sentence_blanked.replace(/____/g, "なに")}
+            label="播放句子"
+            caption="發音"
+          />
+        </div>
+        <p className="mt-6 text-center text-2xl font-medium leading-relaxed text-[var(--color-ink)]">
+          {q.sentence_blanked}
+        </p>
+        {q.sentence_zh && (
+          <p className="mt-3 text-center text-sm text-stone-500">{q.sentence_zh}</p>
+        )}
+        <p className="mt-4 text-center text-sm text-stone-500">{q.prompt}</p>
+        {revealed && (
+          <p className="mt-4 text-center text-sm text-emerald-700">
+            完整句子：{q.sentence_full}
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {q.options.map((opt) => {
+          let ring = "ring-1 ring-orange-100 hover:ring-[var(--color-primary)]";
+          if (revealed) {
+            if (opt.id === q.correct_option_id) {
+              ring = "ring-2 ring-emerald-500 bg-emerald-50";
+            } else if (opt.id === selected) {
+              ring = "ring-2 ring-red-400 bg-red-50";
+            } else {
+              ring = "ring-1 ring-stone-200 opacity-50";
+            }
+          }
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => handleSelect(opt.id)}
+              disabled={revealed}
+              className={`rounded-2xl bg-white p-5 text-center text-lg font-medium transition active:scale-[0.97] ${ring}`}
+            >
+              {opt.text}
+            </button>
+          );
+        })}
+      </div>
+
+      {revealed && (
+        <div className="flex flex-col items-center gap-3">
+          <p
+            className={`text-sm font-semibold ${
+              selected === q.correct_option_id ? "text-emerald-600" : "text-red-500"
+            }`}
+          >
+            {selected === q.correct_option_id ? "正確！" : "答錯了"}
+          </p>
+          <button
+            type="button"
+            onClick={handleNext}
+            className="rounded-full bg-[var(--color-primary)] px-8 py-2.5 text-sm font-semibold text-white"
           >
             {index + 1 < questions.length ? "下一題" : "查看結果"}
           </button>

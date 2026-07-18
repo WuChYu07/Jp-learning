@@ -192,10 +192,17 @@ export default function DashboardPage() {
         />
         <ActionCard
           title="測驗"
-          description="四選一讀音/意思測驗，或翻譯練習搭配 AI 批改。"
+          description="四選一、例句挖空，或翻譯練習搭配 AI 批改。"
           to="/quiz"
           cta="開始測驗"
           emoji="✏️"
+        />
+        <ActionCard
+          title="AI 練習"
+          description="日文問答評分，或中文翻譯（附文法／單字提示）。"
+          to="/practice"
+          cta="開始練習"
+          emoji="🗣️"
         />
         <ActionCard
           title="上傳資料"

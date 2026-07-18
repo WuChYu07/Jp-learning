@@ -174,11 +174,65 @@ export type TranslationBatchResponse = {
   total_available: number;
 };
 
+export type ClozeQuestion = {
+  question_id: string;
+  subject: "vocab" | "grammar" | string;
+  entity_id: string;
+  sentence_blanked: string;
+  sentence_full: string;
+  sentence_reading?: string | null;
+  sentence_zh?: string | null;
+  blank_answer: string;
+  prompt: string;
+  options: ChoiceOption[];
+  correct_option_id: string;
+};
+
+export type ClozeBatchResponse = {
+  questions: ClozeQuestion[];
+  total_available: number;
+};
+
 export type TranslationGradeResult = {
   score: number;
   feedback: string;
   correction?: string;
   grammar_notes?: string;
+};
+
+export type PracticeHint = {
+  kind: "vocab" | "grammar" | string;
+  label: string;
+  detail?: string | null;
+};
+
+export type PracticePrompt = {
+  mode: "speak" | "hint_translate" | string;
+  topic: string;
+  prompt_zh?: string | null;
+  prompt_ja?: string | null;
+  hints: PracticeHint[];
+};
+
+export type PracticeGradeResult = {
+  id: string;
+  score: number;
+  feedback_zh: string;
+  model_answer?: string | null;
+};
+
+export type PracticeDialogue = {
+  id: string;
+  mode: string;
+  topic?: string | null;
+  prompt_zh?: string | null;
+  prompt_ja?: string | null;
+  user_answer: string;
+  score?: number | null;
+  feedback_zh?: string | null;
+  model_answer?: string | null;
+  hints_json?: PracticeHint[];
+  created_at: string;
 };
 
 export type SyncReport = {
@@ -480,6 +534,13 @@ export const api = {
     request<GrammarReviewBatchResponse>(
       `/api/v1/grammar/review/due?limit=${limit}&offset=${offset}`,
     ),
+  randomGrammar: (params?: { exclude_id?: string; jlpt?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.exclude_id) q.set("exclude_id", params.exclude_id);
+    if (params?.jlpt) q.set("jlpt", params.jlpt);
+    const qs = q.toString();
+    return request<Grammar>(`/api/v1/grammar/random${qs ? `?${qs}` : ""}`);
+  },
   submitGrammarReview: (grammar_id: string, rating: string) =>
     request<{
       next_review_date: string;
@@ -521,6 +582,10 @@ export const api = {
     request<QuizBatchResponse>(`/api/v1/quiz/vocab?count=${count}`),
   quizGrammar4Choice: (count = 10) =>
     request<QuizBatchResponse>(`/api/v1/quiz/grammar?count=${count}`),
+  quizCloze: (count = 10, subject: "vocab" | "grammar" | "both" = "both") =>
+    request<ClozeBatchResponse>(
+      `/api/v1/quiz/cloze?count=${count}&subject=${subject}`,
+    ),
   translationPrompts: (count = 5) =>
     request<TranslationBatchResponse>(
       `/api/v1/quiz/translation/prompts?count=${count}`,
@@ -729,4 +794,28 @@ export const api = {
     }),
   deleteLink: (id: string) =>
     request<void>(`/api/v1/graph/links/${id}`, { method: "DELETE" }),
+
+  // ── AI practice ──
+  practiceSession: (
+    mode: "speak" | "hint_translate",
+    topic: "daily" | "academic" | "travel" | "work" | "random" = "random",
+  ) =>
+    request<PracticePrompt>("/api/v1/practice/session", {
+      method: "POST",
+      body: JSON.stringify({ mode, topic }),
+    }),
+  practiceGrade: (payload: {
+    mode: "speak" | "hint_translate" | string;
+    topic?: string | null;
+    prompt_zh?: string | null;
+    prompt_ja?: string | null;
+    user_answer: string;
+    hints?: PracticeHint[];
+  }) =>
+    request<PracticeGradeResult>("/api/v1/practice/grade", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  practiceHistory: (limit = 20) =>
+    request<PracticeDialogue[]>(`/api/v1/practice/history?limit=${limit}`),
 };

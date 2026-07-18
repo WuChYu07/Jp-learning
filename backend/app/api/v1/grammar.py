@@ -67,6 +67,15 @@ def submit_grammar_review(
     return grammar_service.submit_review(user_id, body.grammar_id, body.rating)
 
 
+@router.get("/random", response_model=GrammarOut)
+def random_grammar(
+    user_id: Annotated[str | None, Depends(get_effective_user_id)],
+    exclude_id: UUID | None = None,
+    jlpt: JlptLevel | None = None,
+) -> GrammarOut:
+    return grammar_service.random_grammar(user_id, exclude_id=exclude_id, jlpt=jlpt)
+
+
 @router.get("/{grammar_id}", response_model=GrammarOut)
 def get_grammar(grammar_id: UUID) -> GrammarOut:
     return grammar_service.get_grammar(grammar_id)

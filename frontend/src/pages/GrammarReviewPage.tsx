@@ -236,8 +236,10 @@ export default function GrammarReviewPage() {
             </p>
             <SpeakButton
               className="mt-5"
+              size="lg"
               text={current!.grammar_point}
               label={`播放「${current!.grammar_point}」的發音`}
+              caption="點我發音"
             />
             {usage?.semantic_concept && (
               <p className="mt-4 text-base text-stone-500">{usage.semantic_concept}</p>
@@ -255,7 +257,15 @@ export default function GrammarReviewPage() {
             )}
             {example && (
               <div className="mt-6 space-y-2 text-left text-base text-stone-600">
-                <p className="font-medium">{example.japanese}</p>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="min-w-0 flex-1 font-medium">{example.japanese}</p>
+                  <SpeakButton
+                    size="sm"
+                    text={example.japanese}
+                    label="播放例句發音"
+                    caption="播例句"
+                  />
+                </div>
                 {example.reading && (
                   <p className="text-sm text-stone-400">{example.reading}</p>
                 )}
