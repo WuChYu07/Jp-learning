@@ -205,6 +205,13 @@ export default function DashboardPage() {
           emoji="🗣️"
         />
         <ActionCard
+          title="唱歌學文法"
+          description="搜尋日文歌，AI 逐句解釋文法、翻譯與文化補充。"
+          to="/songs"
+          cta="開始聽歌學習"
+          emoji="🎵"
+        />
+        <ActionCard
           title="上傳資料"
           description="上傳 PDF 或圖片，自動解析單字與文法入庫。"
           to="/upload"

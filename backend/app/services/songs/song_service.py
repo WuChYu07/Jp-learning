@@ -96,6 +96,14 @@ class SongListItem(BaseModel):
     line_count: int = 0
 
 
+class SongHistoryItem(BaseModel):
+    song_id: UUID
+    title: str
+    artist: str
+    status: str
+    last_opened_at: str
+
+
 class SongService:
     def __init__(self) -> None:
         self._db: Client | None = None
@@ -203,11 +211,57 @@ class SongService:
             )
         return out
 
+    def list_history(self, *, user_id: str | None, limit: int = 15) -> list[SongHistoryItem]:
+        owner = user_id or settings.SINGLETON_OWNER_ID
+        try:
+            rows = (
+                self.db.table("user_song_history")
+                .select("song_id,last_opened_at")
+                .eq("user_id", owner)
+                .order("last_opened_at", desc=True)
+                .limit(limit)
+                .execute()
+            ).data or []
+        except Exception:
+            logger.exception("song history list failed")
+            return []
+        if not rows:
+            return []
+
+        song_ids = [r["song_id"] for r in rows]
+        songs_map: dict[str, dict] = {}
+        try:
+            songs = (
+                self.db.table("songs")
+                .select("id,title,artist,status")
+                .in_("id", song_ids)
+                .execute()
+            ).data or []
+            songs_map = {str(s["id"]): s for s in songs}
+        except Exception:
+            logger.exception("song history songs fetch failed")
+            return []
+
+        out: list[SongHistoryItem] = []
+        for r in rows:
+            song = songs_map.get(str(r["song_id"]))
+            if not song:
+                continue
+            out.append(
+                SongHistoryItem(
+                    song_id=r["song_id"],
+                    title=song.get("title") or "",
+                    artist=song.get("artist") or "",
+                    status=song.get("status") or "pending",
+                    last_opened_at=r.get("last_opened_at") or "",
+                )
+            )
+        return out
+
     def get_song(self, song_id: str, *, user_id: str | None = None) -> SongOut:
         row = self._get_song_row(song_id)
         lines = self._get_lines(song_id)
-        if user_id:
-            self._touch_history(user_id, song_id)
+        self._touch_history(user_id, song_id)
         return self._to_song_out(row, lines)
 
     def select(self, body: SongSelectRequest, *, user_id: str | None) -> SongOut:
@@ -228,8 +282,7 @@ class SongService:
         existing = self._find_by_marumaru(mid)
         if existing and existing.get("status") == "enriched":
             sid = str(existing["id"])
-            if user_id:
-                self._touch_history(user_id, sid)
+            self._touch_history(user_id, sid)
             return self._to_song_out(existing, self._get_lines(sid))
 
         # Re-enrich failed / partial
@@ -240,8 +293,7 @@ class SongService:
             if body.enrich:
                 self._run_enrich(song_id)
             row = self._get_song_row(song_id)
-            if user_id:
-                self._touch_history(user_id, song_id)
+            self._touch_history(user_id, song_id)
             return self._to_song_out(row, self._get_lines(song_id))
 
         # New song
@@ -249,8 +301,7 @@ class SongService:
         if body.enrich:
             self._run_enrich(song_id)
         row = self._get_song_row(song_id)
-        if user_id:
-            self._touch_history(user_id, song_id)
+        self._touch_history(user_id, song_id)
         return self._to_song_out(row, self._get_lines(song_id))
 
     # ── internals ──────────────────────────────────────────────
@@ -332,8 +383,7 @@ class SongService:
             self._run_enrich(song_id)
 
         row = self._get_song_row(song_id)
-        if user_id:
-            self._touch_history(user_id, song_id)
+        self._touch_history(user_id, song_id)
         return self._to_song_out(row, self._get_lines(song_id))
 
     def _fetch_and_store_marumaru(
@@ -563,7 +613,7 @@ class SongService:
         except Exception:
             return []
 
-    def _touch_history(self, user_id: str, song_id: str) -> None:
+    def _touch_history(self, user_id: str | None, song_id: str) -> None:
         try:
             ensure_owner_user()
             now = datetime.now(UTC).isoformat()

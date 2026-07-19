@@ -3,6 +3,7 @@ import {
   api,
   SongCandidate,
   SongDetail,
+  SongHistoryItem,
   SongListItem,
   formatUserFacingError,
 } from "../lib/api";
@@ -11,6 +12,7 @@ export default function SongsPage() {
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<SongCandidate[]>([]);
   const [library, setLibrary] = useState<SongListItem[]>([]);
+  const [history, setHistory] = useState<SongHistoryItem[]>([]);
   const [song, setSong] = useState<SongDetail | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,10 @@ export default function SongsPage() {
       .listSongs(30)
       .then(setLibrary)
       .catch(() => setLibrary([]));
+    api
+      .songHistory(10)
+      .then(setHistory)
+      .catch(() => setHistory([]));
   }, []);
 
   useEffect(() => {
@@ -109,14 +115,15 @@ export default function SongsPage() {
     }
   }
 
-  async function onOpenLibrary(item: SongListItem) {
+  async function openSongById(id: string) {
     if (selecting) return;
     setSelecting(true);
     setError("");
     try {
-      const detail = await api.getSong(item.id);
+      const detail = await api.getSong(id);
       setSong(detail);
       setExpanded({});
+      loadLibrary();
     } catch (err) {
       setError(formatUserFacingError(err));
     } finally {
@@ -390,6 +397,34 @@ export default function SongsPage() {
         </section>
       )}
 
+      {!song && history.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold text-stone-700">最近看過</h2>
+          <ul className="divide-y divide-orange-50 overflow-hidden rounded-2xl bg-white ring-1 ring-orange-100">
+            {history.map((item) => (
+              <li key={item.song_id}>
+                <button
+                  type="button"
+                  onClick={() => openSongById(item.song_id)}
+                  disabled={selecting}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-orange-50/50 disabled:opacity-60"
+                >
+                  <div>
+                    <p className="font-semibold text-stone-800">{item.title}</p>
+                    <p className="text-sm text-stone-500">
+                      {item.artist || "未知歌手"} · {statusLabel(item.status)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-stone-400">
+                    {formatRelativeTime(item.last_opened_at)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {!song && library.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-bold text-stone-700">我的曲庫</h2>
@@ -398,8 +433,9 @@ export default function SongsPage() {
               <li key={item.id}>
                 <button
                   type="button"
-                  onClick={() => onOpenLibrary(item)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-orange-50/50"
+                  onClick={() => openSongById(item.id)}
+                  disabled={selecting}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-orange-50/50 disabled:opacity-60"
                 >
                   <div>
                     <p className="font-semibold text-stone-800">{item.title}</p>
@@ -416,6 +452,21 @@ export default function SongsPage() {
       )}
     </div>
   );
+}
+
+function formatRelativeTime(iso: string): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "剛剛";
+  if (minutes < 60) return `${minutes} 分鐘前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小時前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  return new Date(iso).toLocaleDateString("zh-TW");
 }
 
 function statusLabel(status: string): string {

@@ -289,6 +289,14 @@ export type SongListItem = {
   line_count: number;
 };
 
+export type SongHistoryItem = {
+  song_id: string;
+  title: string;
+  artist: string;
+  status: string;
+  last_opened_at: string;
+};
+
 export type SyncReport = {
   vocab_source_rows: number;
   vocab_new: number;
@@ -881,6 +889,8 @@ export const api = {
   recommendSongs: (limit = 10) =>
     request<SongCandidate[]>(`/api/v1/songs/recommend?limit=${limit}`),
   listSongs: (limit = 30) => request<SongListItem[]>(`/api/v1/songs?limit=${limit}`),
+  songHistory: (limit = 15) =>
+    request<SongHistoryItem[]>(`/api/v1/songs/history?limit=${limit}`),
   getSong: (id: string) => request<SongDetail>(`/api/v1/songs/${id}`),
   selectSong: (payload: {
     marumaru_id?: string | null;
