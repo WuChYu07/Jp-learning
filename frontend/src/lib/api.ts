@@ -235,6 +235,59 @@ export type PracticeDialogue = {
   created_at: string;
 };
 
+export type SongCandidate = {
+  marumaru_id: string;
+  title: string;
+  artist: string;
+  source_url: string;
+  release_date?: string | null;
+  category?: string | null;
+  cached_song_id?: string | null;
+  cached_status?: string | null;
+};
+
+export type SongLine = {
+  id?: string | null;
+  line_no: number;
+  text_ja: string;
+  text_zh?: string | null;
+  grammar_zh?: string | null;
+  note_zh?: string | null;
+  jlpt_hints?: string[];
+};
+
+export type SongDetail = {
+  id: string;
+  title: string;
+  artist: string;
+  release_date?: string | null;
+  marumaru_id?: string | null;
+  source_url?: string | null;
+  category?: string | null;
+  difficulty?: number | null;
+  youtube_url?: string | null;
+  status: string;
+  lyrics_source?: string | null;
+  zh_source?: string | null;
+  error_message?: string | null;
+  fetched_at?: string | null;
+  enriched_at?: string | null;
+  created_at?: string | null;
+  lines: SongLine[];
+};
+
+export type SongListItem = {
+  id: string;
+  title: string;
+  artist: string;
+  status: string;
+  marumaru_id?: string | null;
+  source_url?: string | null;
+  enriched_at?: string | null;
+  updated_at?: string | null;
+  line_count: number;
+};
+
 export type SyncReport = {
   vocab_source_rows: number;
   vocab_new: number;
@@ -820,4 +873,25 @@ export const api = {
     }),
   practiceHistory: (limit = 20) =>
     request<PracticeDialogue[]>(`/api/v1/practice/history?limit=${limit}`),
+
+  // ── Songs (MARUMARU + AI) ──
+  searchSongs: (q: string, limit = 12) =>
+    request<SongCandidate[]>(`/api/v1/songs/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  recommendSongs: (limit = 10) =>
+    request<SongCandidate[]>(`/api/v1/songs/recommend?limit=${limit}`),
+  listSongs: (limit = 30) => request<SongListItem[]>(`/api/v1/songs?limit=${limit}`),
+  getSong: (id: string) => request<SongDetail>(`/api/v1/songs/${id}`),
+  selectSong: (payload: {
+    marumaru_id?: string | null;
+    source_url?: string | null;
+    title?: string | null;
+    artist?: string | null;
+    paste_ja?: string | null;
+    paste_zh?: string | null;
+    enrich?: boolean;
+  }) =>
+    request<SongDetail>("/api/v1/songs/select", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
