@@ -269,6 +269,7 @@ export type SongDetail = {
   status: string;
   lyrics_source?: string | null;
   zh_source?: string | null;
+  overview_zh?: string | null;
   error_message?: string | null;
   fetched_at?: string | null;
   enriched_at?: string | null;

@@ -324,6 +324,18 @@ export default function SongsPage() {
             )}
           </div>
 
+          {song.overview_zh && (
+            <div className="rounded-2xl bg-orange-50/70 p-5 ring-1 ring-orange-100">
+              <p className="mb-2 text-sm font-bold text-[var(--color-primary-dark)]">
+                這首歌的背景與解讀
+              </p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">
+                {song.overview_zh}
+              </p>
+              <p className="mt-2 text-[11px] text-stone-400">由 AI 產生，僅供學習參考</p>
+            </div>
+          )}
+
           <ul className="space-y-2">
             {song.lines.map((ln) => {
               const open = !!expanded[ln.line_no];

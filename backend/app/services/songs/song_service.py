@@ -65,6 +65,7 @@ class SongOut(BaseModel):
     status: str
     lyrics_source: str | None = None
     zh_source: str | None = None
+    overview_zh: str | None = None
     error_message: str | None = None
     fetched_at: str | None = None
     enriched_at: str | None = None
@@ -433,6 +434,7 @@ class SongService:
         ).execute()
         row = self._get_song_row(song_id)
         lines = self._get_lines(song_id)
+        self._generate_overview(song_id, row, lines)
         try:
             enriched = song_enrichment_service.enrich_lines(
                 title=row.get("title") or "",
@@ -481,6 +483,31 @@ class SongService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"AI 解釋失敗：{exc}",
             ) from exc
+
+    def _generate_overview(self, song_id: str, row: dict, lines: list[dict]) -> None:
+        """Generate song-level intro; skip silently if already present or column missing."""
+        if (row.get("overview_zh") or "").strip():
+            return
+        overview = song_enrichment_service.generate_overview(
+            title=row.get("title") or "",
+            artist=row.get("artist") or "",
+            release_date=row.get("release_date"),
+            category=row.get("category"),
+            lines=[
+                {"line_no": ln["line_no"], "text_ja": ln.get("text_ja")}
+                for ln in lines
+            ],
+        )
+        if not overview:
+            return
+        try:
+            self.db.table("songs").update({"overview_zh": overview}).eq("id", song_id).execute()
+        except Exception:
+            # Column missing (016 not applied yet) — feature degrades gracefully.
+            logger.warning(
+                "overview_zh update failed; run migrations/016_song_overview.sql",
+                exc_info=True,
+            )
 
     def _replace_lines(self, song_id: str, lines: list[MarumaruLine]) -> None:
         self.db.table("song_lines").delete().eq("song_id", song_id).execute()
@@ -574,6 +601,7 @@ class SongService:
             status=row.get("status") or "pending",
             lyrics_source=row.get("lyrics_source"),
             zh_source=row.get("zh_source"),
+            overview_zh=row.get("overview_zh"),
             error_message=row.get("error_message"),
             fetched_at=row.get("fetched_at"),
             enriched_at=row.get("enriched_at"),

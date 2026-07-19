@@ -20,12 +20,13 @@ You explain song lyrics line by line for language learning.
 
 For each lyric line, return:
 - grammar_zh: concise Traditional Chinese explanation of noteworthy grammar / particles / conjugations / set phrases in THIS line. If the line is mostly English or trivial, still give a short note.
-- note_zh: optional cultural / literary / wordplay / intertextual tip (e.g. 「君が綺麗だ」 echoing 夏目漱石「月が綺麗です」). Omit or use empty string when you are not confident.
+- note_zh: optional cultural / literary / wordplay / intertextual tip (e.g. 「君が綺麗だ」 echoing 夏目漱石「月が綺麗です」), or a short remark on how THIS line connects to the song's overall theme. You may draw on widely-known public information about this song (tie-ins, famous interpretations). Omit or use empty string when you are not confident.
 - jlpt_hints: optional short strings like "N3:〜ている" (0–2 items).
 
 Rules:
 - Write ALL explanations in Traditional Chinese (Taiwan).
 - Do NOT invent grammar that is not in the line.
+- Never fabricate sources (no "網友說" / fake quotes); only use well-established facts or clearly framed interpretation.
 - Prefer accuracy over cleverness; leave note_zh empty when unsure.
 - Return ONLY valid JSON.
 """
@@ -53,9 +54,53 @@ Return ONLY valid JSON: {{"lines":[{{"line_no":1,"text_zh":"…"}}]}}
 Keep line_no aligned. Be natural and lyrical but faithful. Do not add commentary.
 """
 
+_OVERVIEW_SYSTEM = """You are a Japanese music guide writing for Traditional Chinese (Taiwan) learners.
+Given a Japanese song's metadata and lyrics, write ONE cohesive introduction (150-300 Chinese characters) covering:
+1. Background: release context, tie-ins (drama/anime/film theme song), notable facts — ONLY if widely known and you are confident. If unsure, skip facts entirely.
+2. Theme & common interpretation: what the song is about, how it is commonly understood, its emotional arc.
+3. One or two learning highlights: e.g. recurring grammar patterns, tone/register (casual male speech, poetic inversion), or famous lines worth attention.
+
+Rules:
+- Write in Traditional Chinese (Taiwan). Do not use Simplified Chinese.
+- NEVER fabricate facts, chart numbers, quotes, or "網友評論". When unsure about background facts, write only lyric-based interpretation.
+- Paraphrase in your own words; do not copy long passages from any source.
+- Return ONLY valid JSON: {"overview_zh": "<the introduction>"}
+"""
+
 
 class SongEnrichmentService:
     BATCH = 12
+
+    def generate_overview(
+        self,
+        *,
+        title: str,
+        artist: str,
+        release_date: str | None,
+        category: str | None,
+        lines: list[dict[str, Any]],
+    ) -> str | None:
+        """One-shot song background + interpretation intro (Traditional Chinese)."""
+        lyric_sample = "\n".join(
+            f"{ln['line_no']}. {ln.get('text_ja') or ''}" for ln in lines[:40]
+        )
+        meta = f"Title: {title}\nArtist: {artist}"
+        if release_date:
+            meta += f"\nRelease date: {release_date}"
+        if category:
+            meta += f"\nCategory: {category}"
+        try:
+            data = self._gemini_json(
+                _OVERVIEW_SYSTEM,
+                f"{meta}\n\nLyrics:\n{lyric_sample}",
+                max_tokens=2048,
+                temperature=0.4,
+            )
+        except HTTPException:
+            logger.warning("song overview generation failed", exc_info=True)
+            return None
+        overview = str(data.get("overview_zh") or "").strip()
+        return overview or None
 
     def enrich_lines(
         self,
