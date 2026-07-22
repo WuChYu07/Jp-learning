@@ -29,7 +29,8 @@ def create_app() -> FastAPI:
         if not settings.AUTH_ENABLED:
             ensure_owner_user()
 
-    @app.get("/health", tags=["health"])
+    # GET for browsers / curl; HEAD for free UptimeRobot checks (no GET quota).
+    @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
     async def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
