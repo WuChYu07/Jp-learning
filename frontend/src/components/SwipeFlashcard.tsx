@@ -72,6 +72,12 @@ export default function SwipeFlashcard({
     if (!isDragging || !swipeEnabled) return;
     const dx = e.clientX - startX.current;
     const dy = e.clientY - startY.current;
+    // Prefer vertical scroll when content is tall; don't steal it as a swipe.
+    if (!dragged.current && Math.abs(dy) > DRAG_START && Math.abs(dy) > Math.abs(dx)) {
+      setIsDragging(false);
+      setDragX(0);
+      return;
+    }
     if (!dragged.current && (Math.abs(dx) > DRAG_START || Math.abs(dy) > DRAG_START)) {
       dragged.current = true;
     }
@@ -115,7 +121,7 @@ export default function SwipeFlashcard({
   const rightOpacity = dragX > 0 ? progress : 0;
 
   return (
-    <div className="swipe-card-stage relative mx-auto w-full max-w-xl select-none touch-none">
+    <div className="swipe-card-stage relative mx-auto w-full max-w-xl select-none">
       <div
         aria-hidden
         className="swipe-card-shadow absolute inset-x-4 top-3 h-full rounded-3xl bg-orange-100/60"
@@ -131,7 +137,7 @@ export default function SwipeFlashcard({
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
         onTransitionEnd={handleTransitionEnd}
-        className={`swipe-card relative w-full cursor-grab rounded-3xl bg-white px-12 py-16 text-center shadow-lg ring-1 ring-orange-100 active:cursor-grabbing ${
+        className={`swipe-card relative flex w-full cursor-grab flex-col rounded-3xl bg-white px-8 py-10 text-center shadow-lg ring-1 ring-orange-100 active:cursor-grabbing sm:px-12 sm:py-14 ${
           exiting ? "swipe-card-exit" : isDragging ? "" : "swipe-card-spring"
         } ${!exiting ? "swipe-card-ready" : ""}`}
         style={{
@@ -178,7 +184,7 @@ export default function SwipeFlashcard({
         {/* Sparkle on right-swipe exit */}
         {exiting === "right" && <div aria-hidden className="swipe-sparkle" />}
 
-        <div className="relative z-10">{!flipped ? front : back}</div>
+        <div className="swipe-card-body relative z-10 w-full">{!flipped ? front : back}</div>
       </div>
 
       {!exiting && (

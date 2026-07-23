@@ -39,6 +39,31 @@ body {
 
 .swipe-card {
   will-change: transform, opacity;
+  max-height: min(70vh, 34rem);
+}
+
+.swipe-card-body {
+  max-height: min(58vh, 26rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  padding-inline: 0.25rem;
+}
+
+.swipe-card-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.swipe-card-body::-webkit-scrollbar-thumb {
+  background: rgb(214 211 209);
+  border-radius: 999px;
+}
+
+.swipe-card-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .swipe-card-spring {
