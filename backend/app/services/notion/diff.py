@@ -83,7 +83,13 @@ def annotate_vocab_sync_changes(
     items: list[VocabularyItemInput],
     db: Client,
 ) -> tuple[int, int, int]:
-    """Set sync_change on vocab items. Returns (new, updated, unchanged) counts."""
+    """Set sync_change on vocab items. Returns (new, updated, unchanged) counts.
+
+    Diffs against `vocabularies.notion_source_hash` — a snapshot of what Notion
+    had at last sync — rather than the DB's current definitions, so AI-enriched
+    content (meaning/notes/examples added after sync) never shows up as a false
+    "updated".
+    """
     if not items:
         return 0, 0, 0
 
@@ -96,44 +102,19 @@ def annotate_vocab_sync_changes(
         batch = list(hash_map.keys())[batch_start : batch_start + 100]
         result = (
             db.table("vocabularies")
-            .select("id, content_hash")
+            .select("id, content_hash, notion_source_hash")
             .in_("content_hash", batch)
             .execute()
         )
         for row in result.data or []:
             existing_by_hash[row["content_hash"]] = row
 
-    stored_source_hash: dict[str, str] = {}
-    if existing_by_hash:
-        vocab_ids = [row["id"] for row in existing_by_hash.values()]
-        for batch_start in range(0, len(vocab_ids), 100):
-            batch = vocab_ids[batch_start : batch_start + 100]
-            defs = (
-                db.table("vocabulary_definitions")
-                .select(
-                    "vocabulary_id, meaning_zh, notes_zh, example_sentences, sort_order"
-                )
-                .in_("vocabulary_id", batch)
-                .order("sort_order")
-                .execute()
-            ).data or []
-            by_vocab: dict[str, list] = {}
-            for d in defs:
-                by_vocab.setdefault(d["vocabulary_id"], []).append(d)
-            for content_hash, row in existing_by_hash.items():
-                item = hash_map.get(content_hash)
-                if not item:
-                    continue
-                def_rows = by_vocab.get(row["id"], [])
-                stored_source_hash[content_hash] = vocab_source_hash(
-                    word=item.word,
-                    reading=item.reading,
-                    definitions=def_rows,
-                )
-
     new_count = updated_count = unchanged_count = 0
+    backfill: list[dict] = []
+
     for entry_hash, item in hash_map.items():
-        if entry_hash not in existing_by_hash:
+        row = existing_by_hash.get(entry_hash)
+        if row is None:
             item.sync_change = "new"
             new_count += 1
             continue
@@ -143,13 +124,29 @@ def annotate_vocab_sync_changes(
             reading=item.reading,
             definitions=item.definitions,
         )
-        stored = stored_source_hash.get(entry_hash)
-        if stored and stored == notion_hash:
+        stored = row.get("notion_source_hash")
+
+        if stored is None:
+            # No baseline yet (entry predates this column, e.g. already
+            # AI-enriched). Freeze current Notion content as the baseline
+            # instead of flagging a false "updated" this one time.
+            item.sync_change = "unchanged"
+            unchanged_count += 1
+            backfill.append({"id": row["id"], "notion_source_hash": notion_hash})
+        elif stored == notion_hash:
             item.sync_change = "unchanged"
             unchanged_count += 1
         else:
             item.sync_change = "updated"
             updated_count += 1
+
+    for entry in backfill:
+        try:
+            db.table("vocabularies").update(
+                {"notion_source_hash": entry["notion_source_hash"]}
+            ).eq("id", entry["id"]).execute()
+        except Exception:
+            pass
 
     return new_count, updated_count, unchanged_count
 

@@ -16,7 +16,12 @@ from app.models.schemas.vocab import (
 from app.services import gemini_service
 from app.services.gemini_service import IngestionFocus
 from app.services.grammar_service import grammar_service
-from app.services.hash_service import compute_upload_hash, grammar_entry_hash, vocab_entry_hash
+from app.services.hash_service import (
+    compute_upload_hash,
+    grammar_entry_hash,
+    vocab_entry_hash,
+    vocab_source_hash,
+)
 from app.services.text_sanitize import clean_text
 
 
@@ -252,6 +257,13 @@ class IngestionService:
                     "source_type": source_type.value,
                     "ingestion_id": str(ingestion_id),
                     "created_by": user_id,
+                    "notion_source_hash": (
+                        vocab_source_hash(
+                            word=item.word, reading=item.reading, definitions=item.definitions
+                        )
+                        if source_type == SourceType.NOTION
+                        else None
+                    ),
                 }
             )
 
@@ -287,7 +299,9 @@ class IngestionService:
         existing_hashes = [
             h for h in hash_map if h in id_by_hash and id_by_hash[h] not in newly_inserted
         ]
-        gap_updated = self._fill_vocab_definition_gaps(hash_map, id_by_hash, existing_hashes)
+        gap_updated = self._fill_vocab_definition_gaps(
+            hash_map, id_by_hash, existing_hashes, source_type
+        )
 
         existing_count = len(existing_hashes)
         return PersistStats(
@@ -303,8 +317,12 @@ class IngestionService:
         hash_map: dict[str, VocabularyItemInput],
         id_by_hash: dict[str, UUID],
         existing_hashes: list[str],
+        source_type: SourceType,
     ) -> int:
         """For already-synced vocab, write Notion examples/notes only into empty fields.
+
+        Also refreshes `notion_source_hash` for Notion syncs so the next diff
+        compares against what Notion has now, independent of AI-enriched content.
 
         Returns the number of existing rows that actually received a gap fill.
         """
@@ -313,13 +331,26 @@ class IngestionService:
             item = hash_map.get(entry_hash)
             if not item or not item.definitions:
                 continue
+
+            vocab_id = id_by_hash[entry_hash]
+
+            if source_type == SourceType.NOTION:
+                notion_hash = vocab_source_hash(
+                    word=item.word, reading=item.reading, definitions=item.definitions
+                )
+                (
+                    self.db.table("vocabularies")
+                    .update({"notion_source_hash": notion_hash})
+                    .eq("id", str(vocab_id))
+                    .execute()
+                )
+
             parsed = item.definitions[0]
             has_examples = bool(parsed.example_sentences)
             has_notes = bool((parsed.notes_zh or "").strip())
             if not has_examples and not has_notes:
                 continue
 
-            vocab_id = id_by_hash[entry_hash]
             existing_defs = (
                 self.db.table("vocabulary_definitions")
                 .select("id, example_sentences, notes_zh")
