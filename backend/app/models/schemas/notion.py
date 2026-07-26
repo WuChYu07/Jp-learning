@@ -11,6 +11,8 @@ class NotionSyncRequest(BaseModel):
     focus: NotionFocus = "both"
     page_id: str | None = None
     upload_images: bool = True
+    # Bypass the last_edited_time unchanged-skip and re-fetch every block.
+    force_refresh: bool = False
 
 
 class NotionPageSource(BaseModel):

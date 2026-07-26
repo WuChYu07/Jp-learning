@@ -48,6 +48,7 @@ class NotionSyncService:
         focus: NotionFocus = "both",
         page_id: str | None = None,
         upload_images: bool = True,
+        force_refresh: bool = False,
     ) -> NotionSyncPreview:
         if not settings.NOTION_TOKEN:
             raise HTTPException(status_code=400, detail="NOTION_TOKEN is not configured")
@@ -77,6 +78,37 @@ class NotionSyncService:
                     if page_focus in {"vocabulary", "both"}:
                         vocab_page_ids.append(resolved_page_id)
                     page = client.get_page(resolved_page_id)
+                    current_edited_time = page.get("last_edited_time")
+
+                    if not force_refresh:
+                        snapshot = self._get_last_sync_snapshot(resolved_page_id)
+                        if (
+                            snapshot
+                            and snapshot.get("last_edited_time")
+                            and snapshot["last_edited_time"] == current_edited_time
+                        ):
+                            # Notion propagates a block edit up to the page's own
+                            # last_edited_time, so an unchanged timestamp means
+                            # nothing in this page changed — skip the block fetch
+                            # entirely (large pages are rate-limited by Notion and
+                            # can take minutes to fetch in full).
+                            page_hash = snapshot["content_hash"]
+                            hash_parts.append(page_hash)
+                            if self._find_cached_sync(page_hash) is None:
+                                unchanged = False
+                            sources.append(
+                                NotionPageSource(
+                                    focus=page_focus,
+                                    page_id=resolved_page_id,
+                                    page_title=extract_page_title(page),
+                                    content_hash=page_hash,
+                                    last_edited_time=current_edited_time,
+                                    image_count=snapshot.get("image_count") or 0,
+                                    section_count=0,
+                                )
+                            )
+                            continue
+
                     blocks = client.fetch_all_blocks(resolved_page_id)
                     if upload_images:
                         self._persist_images(client, blocks)
@@ -276,6 +308,7 @@ class NotionSyncService:
             skip_ingestion_cache=force,
             vocab_field_overwrites=vocab_field_overwrites,
         )
+        last_edited_by_page = self._fetch_current_edited_times(_split_page_ids(page_id))
         for source in _split_page_ids(page_id):
             self._write_sync_log(
                 page_id=source,
@@ -286,8 +319,29 @@ class NotionSyncService:
                 image_count=sum(len(g.image_urls) for g in parsed.grammars),
                 auto_approved=auto_approved,
                 focus=focus,
+                last_edited_time=last_edited_by_page.get(source),
             )
         return response
+
+    def _fetch_current_edited_times(self, page_ids: list[str]) -> dict[str, str | None]:
+        """Refresh last_edited_time per page at confirm time (cheap: one API call
+        per page) so the next preview's unchanged-skip check has something to
+        compare against.
+        """
+        result: dict[str, str | None] = {}
+        if not settings.NOTION_TOKEN:
+            return result
+        try:
+            with NotionClient(settings.NOTION_TOKEN) as client:
+                for pid in page_ids:
+                    try:
+                        page = client.get_page(pid)
+                        result[pid] = page.get("last_edited_time")
+                    except NotionClientError:
+                        logger.warning("could not refresh last_edited_time for page %s", pid)
+        except NotionClientError:
+            logger.warning("could not open Notion client to refresh last_edited_time")
+        return result
 
     def get_status(self) -> dict:
         result = (
@@ -322,26 +376,41 @@ class NotionSyncService:
         }
 
     def _persist_images(self, client: NotionClient, blocks) -> None:
-        for block in blocks:
-            if block.type != "image" or not block.image_url:
-                continue
-            if block.image_url.startswith("http") and "supabase" in block.image_url:
-                continue
+        candidates = [
+            block
+            for block in blocks
+            if block.type == "image"
+            and block.image_url
+            and not (block.image_url.startswith("http") and "supabase" in block.image_url)
+        ]
+        if not candidates:
+            return
+
+        cached_by_block: dict[str, str] = {}
+        block_ids = [block.id for block in candidates]
+        for batch_start in range(0, len(block_ids), 200):
+            batch = block_ids[batch_start : batch_start + 200]
             try:
-                cached = (
+                result = (
                     self.db.table("notion_images")
-                    .select("storage_url")
-                    .eq("notion_block_id", block.id)
-                    .maybe_single()
+                    .select("notion_block_id, storage_url")
+                    .in_("notion_block_id", batch)
                     .execute()
                 )
-                if cached is not None and cached.data:
-                    block.image_url = cached.data["storage_url"]
-                    continue
+                for row in result.data or []:
+                    if row.get("storage_url"):
+                        cached_by_block[row["notion_block_id"]] = row["storage_url"]
             except Exception:
                 logger.warning(
-                    "notion_images cache lookup failed for block %s; will re-fetch", block.id
+                    "notion_images batch cache lookup failed for a batch of %d blocks",
+                    len(batch),
                 )
+
+        for block in candidates:
+            cached_url = cached_by_block.get(block.id)
+            if cached_url:
+                block.image_url = cached_url
+                continue
             try:
                 fresh_url = client.refresh_image_url(block.id) or block.image_url
                 content, content_type = client.download_image(fresh_url)
@@ -374,6 +443,29 @@ class NotionSyncService:
         payload = f"{page_id}|{page.get('last_edited_time')}|{len(blocks)}|{block_ids}"
         return sha256_hex(payload.encode("utf-8"))
 
+    def _get_last_sync_snapshot(self, page_id: str) -> dict | None:
+        try:
+            result = (
+                self.db.table("notion_sync_log")
+                .select("content_hash, last_edited_time, image_count")
+                .eq("page_id", page_id)
+                .order("synced_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception:
+            # last_edited_time column may not exist until migration 020 is applied.
+            logger.debug(
+                "notion_sync_log snapshot lookup failed for page %s; falling back to "
+                "a full re-fetch (migration 020 may not be applied yet)",
+                page_id,
+            )
+            return None
+        rows = result.data or []
+        if not rows or not rows[0].get("last_edited_time"):
+            return None
+        return rows[0]
+
     def _find_cached_sync(self, content_hash: str) -> dict | None:
         result = (
             self.db.table("notion_sync_log")
@@ -397,6 +489,7 @@ class NotionSyncService:
         image_count: int,
         auto_approved: bool,
         focus: NotionFocus,
+        last_edited_time: str | None = None,
     ) -> None:
         row = {
             "page_id": page_id,
@@ -407,15 +500,18 @@ class NotionSyncService:
             "image_count": image_count,
             "auto_approved": auto_approved,
             "focus": focus,
+            "last_edited_time": last_edited_time,
         }
         try:
             self.db.table("notion_sync_log").insert(row).execute()
         except Exception:
             logger.debug(
-                "notion_sync_log insert failed with 'focus' column; retrying without it "
-                "(migration 004 may not be applied yet)"
+                "notion_sync_log insert failed with 'focus'/'last_edited_time' column; "
+                "retrying with only the original columns (migrations 004/020 may not be "
+                "applied yet)"
             )
             row.pop("focus", None)
+            row.pop("last_edited_time", None)
             self.db.table("notion_sync_log").insert(row).execute()
 
 

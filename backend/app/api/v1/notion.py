@@ -23,6 +23,7 @@ def sync_notion_page(
         focus=body.focus,
         page_id=body.page_id,
         upload_images=body.upload_images,
+        force_refresh=body.force_refresh,
     )
 
     if settings.NOTION_AUTO_APPROVE:

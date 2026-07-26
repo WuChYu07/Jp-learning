@@ -55,19 +55,30 @@ export function formatUserFacingError(err: unknown): string {
 export async function fetchWithRetry(
   url: string,
   init?: RequestInit,
-  opts?: { onRetry?: (attempt: number) => void },
+  opts?: {
+    onRetry?: (attempt: number) => void;
+    /** Override the default 45s per-attempt timeout (e.g. for large Notion pages). */
+    timeoutMs?: number;
+    /** Override the default 3 attempts. Use 1 for slow-but-legitimate calls where
+     * retrying would just restart the same expensive work. */
+    maxAttempts?: number;
+    /** Override the default "waking up" copy shown when all attempts fail. */
+    wakeMessage?: string;
+  },
 ): Promise<Response> {
+  const timeoutMs = opts?.timeoutMs ?? TIMEOUT_MS;
+  const maxAttempts = opts?.maxAttempts ?? MAX_ATTEMPTS;
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const res = await fetch(url, { ...init, signal: controller.signal });
       clearTimeout(timer);
 
-      if (WAKE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+      if (WAKE_STATUS.has(res.status) && attempt < maxAttempts) {
         opts?.onRetry?.(attempt);
         await sleep(RETRY_DELAY_MS * attempt);
         continue;
@@ -78,7 +89,7 @@ export async function fetchWithRetry(
       clearTimeout(timer);
       lastError = err;
 
-      if (attempt < MAX_ATTEMPTS && isRetriableNetworkError(err)) {
+      if (attempt < maxAttempts && isRetriableNetworkError(err)) {
         opts?.onRetry?.(attempt);
         await sleep(RETRY_DELAY_MS * attempt);
         continue;
@@ -88,7 +99,7 @@ export async function fetchWithRetry(
   }
 
   if (isRetriableNetworkError(lastError)) {
-    throw new ApiWakeError();
+    throw new ApiWakeError(opts?.wakeMessage);
   }
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError));

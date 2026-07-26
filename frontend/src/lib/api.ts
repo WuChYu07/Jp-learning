@@ -530,7 +530,11 @@ export type ContentLink = ContentLinkCreate & {
   id: string;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  transportOpts?: { timeoutMs?: number; maxAttempts?: number; wakeMessage?: string },
+): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", "application/json");
@@ -540,7 +544,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const res = await fetchWithRetry(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetchWithRetry(`${API_BASE}${path}`, { ...init, headers }, transportOpts);
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(formatApiError(detail, res.statusText));
@@ -738,11 +742,29 @@ export const api = {
     focus: "vocabulary" | "grammar" | "both" = "both",
     pageId?: string,
     uploadImages = true,
+    forceRefresh = false,
   ) =>
-    request<NotionSyncPreview | IngestionResponse>("/api/v1/notion/sync", {
-      method: "POST",
-      body: JSON.stringify({ focus, page_id: pageId || null, upload_images: uploadImages }),
-    }),
+    request<NotionSyncPreview | IngestionResponse>(
+      "/api/v1/notion/sync",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          focus,
+          page_id: pageId || null,
+          upload_images: uploadImages,
+          force_refresh: forceRefresh,
+        }),
+      },
+      {
+        // Notion pages with thousands of blocks are rate-limited on Notion's
+        // side and can take minutes to fetch in full; one long attempt beats
+        // three short ones that all restart the same expensive work.
+        timeoutMs: 10 * 60_000,
+        maxAttempts: 1,
+        wakeMessage:
+          "同步逾時。若 Notion 頁面資料量很大，首次或有大量變更時可能需要數分鐘，請稍後再試一次；若持續逾時請確認後端狀態。",
+      },
+    ),
 
   notionConfirm: (
     parsed: NotionSyncPreview["parsed"],
@@ -758,22 +780,31 @@ export const api = {
       vocab_field_overwrites?: Record<string, string[]>;
     },
   ) =>
-    request<IngestionResponse>("/api/v1/notion/confirm", {
-      method: "POST",
-      body: JSON.stringify({
-        parsed,
-        content_hash,
-        page_id,
-        page_title,
-        focus,
-        force: options?.force ?? false,
-        force_overwrite_grammar_block_ids:
-          options?.force_overwrite_grammar_block_ids ?? [],
-        archive_grammar_ids: options?.archive_grammar_ids ?? [],
-        archive_vocab_ids: options?.archive_vocab_ids ?? [],
-        vocab_field_overwrites: options?.vocab_field_overwrites ?? {},
-      }),
-    }),
+    request<IngestionResponse>(
+      "/api/v1/notion/confirm",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          parsed,
+          content_hash,
+          page_id,
+          page_title,
+          focus,
+          force: options?.force ?? false,
+          force_overwrite_grammar_block_ids:
+            options?.force_overwrite_grammar_block_ids ?? [],
+          archive_grammar_ids: options?.archive_grammar_ids ?? [],
+          archive_vocab_ids: options?.archive_vocab_ids ?? [],
+          vocab_field_overwrites: options?.vocab_field_overwrites ?? {},
+        }),
+      },
+      {
+        timeoutMs: 10 * 60_000,
+        maxAttempts: 1,
+        wakeMessage:
+          "匯入逾時。項目較多時可能需要數分鐘，請稍後再試一次；若持續逾時請確認後端狀態。",
+      },
+    ),
 
   notionStatus: () => request<NotionSyncStatus>("/api/v1/notion/status"),
 

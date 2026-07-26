@@ -279,6 +279,7 @@ function NotionSync() {
   const [expandedVocabDiff, setExpandedVocabDiff] = useState<Set<number>>(new Set());
   const [vocabFieldOverwrites, setVocabFieldOverwrites] = useState<Record<string, Set<string>>>({});
   const [forceConfirm, setForceConfirm] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
   const [result, setResult] = useState<IngestionResponse | null>(null);
   const [error, setError] = useState("");
 
@@ -295,7 +296,7 @@ function NotionSync() {
     setVocabFieldOverwrites({});
     setForceConfirm(false);
     try {
-      const res = await api.notionSync(focus, pageId.trim() || undefined);
+      const res = await api.notionSync(focus, pageId.trim() || undefined, true, forceRefresh);
       if ("ingestion_id" in res) {
         setResult(res);
         return;
@@ -421,6 +422,15 @@ function NotionSync() {
         className="w-full rounded-2xl border-2 border-stone-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[var(--color-primary)]"
       />
 
+      <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs text-stone-600 ring-1 ring-stone-100">
+        <input
+          type="checkbox"
+          checked={forceRefresh}
+          onChange={(e) => setForceRefresh(e.target.checked)}
+        />
+        強制重新抓取（略過「頁面未變更」捷徑；一般不需要，除非懷疑捷徑判斷錯誤）
+      </label>
+
       {!preview && !result && (
         <button
           type="button"
@@ -428,7 +438,7 @@ function NotionSync() {
           disabled={syncing}
           className="w-full rounded-full bg-[var(--color-primary)] py-3 text-sm font-semibold text-white shadow-md transition hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
         >
-          {syncing ? "從 Notion 讀取中..." : "同步預覽"}
+          {syncing ? "從 Notion 讀取中（若頁面資料量大或有變更，可能需要數分鐘）..." : "同步預覽"}
         </button>
       )}
 
