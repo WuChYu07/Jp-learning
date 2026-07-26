@@ -7,6 +7,7 @@
 **/credentials.json
 **/service-account*.json
 *.pem
+recovery-codes.txt
 
 # ── Python ───────────────────────────────────────────────────────────────────
 .venv/
@@ -37,3 +38,11 @@ data/reports/
 
 # ── Private interview / career notes (local only) ─────────────────────────────
 docs/private/
+
+# ── One-off local data-pipeline scratch (JLPT gap-fill run, not for push) ─────
+backend/scripts/_cursor_fills.json
+backend/scripts/_gaps.json
+backend/scripts/_sql_batches/
+backend/scripts/apply_cursor_fills.py
+backend/scripts/apply_cursor_fills_supabase.py
+backend/scripts/fill_jlpt_unknown.py
