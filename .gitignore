@@ -34,3 +34,6 @@ Thumbs.db
 data/*.pdf
 data/extracted/
 data/reports/
+
+# ── Private interview / career notes (local only) ─────────────────────────────
+docs/private/

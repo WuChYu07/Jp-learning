@@ -248,6 +248,13 @@ export default function VocabReviewPage() {
         onSwipeRight={() => handleRating("good")}
         onRateHard={() => void handleRating("hard")}
         onRateEasy={() => void handleRating("easy")}
+        cornerBadge={
+          current!.review_score != null ? (
+            <span className="rounded-full bg-stone-900/80 px-2.5 py-1 text-xs font-bold text-white">
+              {Math.round(current!.review_score)}
+            </span>
+          ) : undefined
+        }
         front={
           <>
             <p className="kanji-display text-7xl text-[var(--color-ink)]">{primary}</p>

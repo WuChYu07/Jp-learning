@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, status
 from supabase import Client
 
@@ -12,11 +14,12 @@ from app.models.schemas.ingestion import IngestionParseResult, IngestionResponse
 from app.models.schemas.notion import (
     NotionFocus,
     NotionOrphanedGrammar,
+    NotionOrphanedVocab,
     NotionPageSource,
     NotionSyncPreview,
 )
 from app.services.grammar_service import grammar_service
-from app.services.hash_service import sha256_hex
+from app.services.hash_service import sha256_hex, vocab_entry_hash
 from app.services.ingestion_service import ingestion_service
 from app.services.notion.analyzer import analyze_blocks
 from app.services.notion.client import NotionClient, NotionClientError, extract_page_title
@@ -26,9 +29,13 @@ from app.services.notion.diff import (
     annotate_vocab_sync_changes,
     filter_sync_preview_items,
     find_orphaned_notion_grammars,
+    find_orphaned_notion_vocab,
 )
 from app.services.notion.parser import parse_blocks
+from app.services.vocab_service import vocab_service
 from app.services import storage_service
+
+logger = logging.getLogger(__name__)
 
 
 class NotionSyncService:
@@ -60,12 +67,15 @@ class NotionSyncService:
         grammar_new = grammar_updated = grammar_unchanged = 0
         vocab_new = vocab_updated = vocab_unchanged = 0
         grammar_page_ids: list[str] = []
+        vocab_page_ids: list[str] = []
 
         try:
             with NotionClient(settings.NOTION_TOKEN) as client:
                 for page_focus, resolved_page_id in targets:
                     if page_focus in {"grammar", "both"}:
                         grammar_page_ids.append(resolved_page_id)
+                    if page_focus in {"vocabulary", "both"}:
+                        vocab_page_ids.append(resolved_page_id)
                     page = client.get_page(resolved_page_id)
                     blocks = client.fetch_all_blocks(resolved_page_id)
                     if upload_images:
@@ -89,6 +99,12 @@ class NotionSyncService:
                             grammar_updated += u
                             grammar_unchanged += c
                         except Exception:
+                            logger.exception(
+                                "annotate_grammar_sync_changes failed for page %s; "
+                                "treating all %d parsed grammars as new",
+                                resolved_page_id,
+                                len(parsed.grammars),
+                            )
                             for item in parsed.grammars:
                                 item.sync_change = "new"
                             grammar_new += len(parsed.grammars)
@@ -99,6 +115,12 @@ class NotionSyncService:
                             vocab_updated += vu
                             vocab_unchanged += vc
                         except Exception:
+                            logger.exception(
+                                "annotate_vocab_sync_changes failed for page %s; "
+                                "treating all %d parsed vocab entries as new",
+                                resolved_page_id,
+                                len(parsed.vocabularies),
+                            )
                             for item in parsed.vocabularies:
                                 item.sync_change = "new"
                             vocab_new += len(parsed.vocabularies)
@@ -144,6 +166,15 @@ class NotionSyncService:
             present_block_ids=present_block_ids,
         )
 
+        present_vocab_hashes = {
+            vocab_entry_hash(v.word, v.reading) for v in merged.vocabularies
+        }
+        orphaned_vocab = find_orphaned_notion_vocab(
+            self.db,
+            notion_page_ids=vocab_page_ids,
+            present_hashes=present_vocab_hashes,
+        )
+
         filter_sync_preview_items(merged.grammars, merged.vocabularies)
 
         return NotionSyncPreview(
@@ -174,6 +205,15 @@ class NotionSyncService:
                 )
                 for o in orphaned
             ],
+            orphaned_vocabularies=[
+                NotionOrphanedVocab(
+                    id=o.id,
+                    word=o.word,
+                    reading=o.reading,
+                    notion_page_id=o.notion_page_id,
+                )
+                for o in orphaned_vocab
+            ],
             sources=sources,
         )
 
@@ -190,6 +230,8 @@ class NotionSyncService:
         force: bool = False,
         force_overwrite_grammar_block_ids: list[str] | None = None,
         archive_grammar_ids: list[str] | None = None,
+        archive_vocab_ids: list[str] | None = None,
+        vocab_field_overwrites: dict[str, list[str]] | None = None,
     ) -> IngestionResponse:
         force_blocks = set(force_overwrite_grammar_block_ids or [])
         for item in parsed.grammars:
@@ -202,6 +244,18 @@ class NotionSyncService:
 
                 grammar_service.archive_grammar(UUID(grammar_id))
             except Exception:
+                logger.exception("failed to archive grammar %s during Notion confirm", grammar_id)
+                continue
+
+        for vocabulary_id in archive_vocab_ids or []:
+            try:
+                from uuid import UUID
+
+                vocab_service.archive_vocabulary(UUID(vocabulary_id))
+            except Exception:
+                logger.exception(
+                    "failed to archive vocabulary %s during Notion confirm", vocabulary_id
+                )
                 continue
 
         effective_hash = content_hash
@@ -220,6 +274,7 @@ class NotionSyncService:
             mime_type="application/notion",
             file_name=page_title or page_id,
             skip_ingestion_cache=force,
+            vocab_field_overwrites=vocab_field_overwrites,
         )
         for source in _split_page_ids(page_id):
             self._write_sync_log(
@@ -284,7 +339,9 @@ class NotionSyncService:
                     block.image_url = cached.data["storage_url"]
                     continue
             except Exception:
-                pass
+                logger.warning(
+                    "notion_images cache lookup failed for block %s; will re-fetch", block.id
+                )
             try:
                 fresh_url = client.refresh_image_url(block.id) or block.image_url
                 content, content_type = client.download_image(fresh_url)
@@ -301,8 +358,15 @@ class NotionSyncService:
                         }
                     ).execute()
                 except Exception:
-                    pass
+                    logger.warning(
+                        "notion_images cache upsert failed for block %s", block.id
+                    )
             except Exception:
+                logger.exception(
+                    "failed to persist Notion image for block %s; keeping original (possibly "
+                    "expiring) Notion URL",
+                    block.id,
+                )
                 continue
 
     def _compute_sync_hash(self, page_id: str, page: dict, blocks) -> str:
@@ -347,7 +411,10 @@ class NotionSyncService:
         try:
             self.db.table("notion_sync_log").insert(row).execute()
         except Exception:
-            # focus column may not exist until migration is applied
+            logger.debug(
+                "notion_sync_log insert failed with 'focus' column; retrying without it "
+                "(migration 004 may not be applied yet)"
+            )
             row.pop("focus", None)
             self.db.table("notion_sync_log").insert(row).execute()
 

@@ -136,6 +136,12 @@ export default function PracticePage() {
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       )}
 
+      {(prompt?.daily_ai_limit_reached || result?.daily_ai_limit_reached) && (
+        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          今日 AI 練習次數已偏高，額度明天會重置，目前仍可繼續使用。
+        </p>
+      )}
+
       {prompt && (
         <div className="space-y-4 rounded-3xl bg-white p-6 shadow-lg ring-1 ring-orange-100">
           <div className="flex flex-wrap items-center justify-between gap-2">

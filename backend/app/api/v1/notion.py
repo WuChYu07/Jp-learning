@@ -56,6 +56,8 @@ def confirm_notion_sync(
         force=body.force,
         force_overwrite_grammar_block_ids=body.force_overwrite_grammar_block_ids,
         archive_grammar_ids=body.archive_grammar_ids,
+        archive_vocab_ids=body.archive_vocab_ids,
+        vocab_field_overwrites=body.vocab_field_overwrites,
     )
 
 

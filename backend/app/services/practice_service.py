@@ -37,6 +37,7 @@ class PracticePromptOut(BaseModel):
     prompt_zh: str | None = None
     prompt_ja: str | None = None
     hints: list[PracticeHint] = Field(default_factory=list)
+    daily_ai_limit_reached: bool = False
 
 
 class PracticeGradeRequest(BaseModel):
@@ -53,6 +54,7 @@ class PracticeGradeOut(BaseModel):
     score: int = Field(ge=1, le=5)
     feedback_zh: str
     model_answer: str | None = None
+    daily_ai_limit_reached: bool = False
 
 
 class PracticeDialogueOut(BaseModel):
@@ -128,11 +130,15 @@ class PracticeService:
         mode: PracticeMode,
         topic: PracticeTopic = "random",
     ) -> PracticePromptOut:
-        self._check_daily_limit(user_id)
+        limit_reached = self._check_daily_limit(user_id)
         resolved_topic = self._resolve_topic(topic)
-        if mode == "speak":
-            return self._prompt_speak(resolved_topic)
-        return self._prompt_hint_translate(resolved_topic)
+        result = (
+            self._prompt_speak(resolved_topic)
+            if mode == "speak"
+            else self._prompt_hint_translate(resolved_topic)
+        )
+        result.daily_ai_limit_reached = limit_reached
+        return result
 
     def grade(
         self,
@@ -145,7 +151,7 @@ class PracticeService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Answer cannot be empty",
             )
-        self._check_daily_limit(user_id)
+        limit_reached = self._check_daily_limit(user_id)
         ensure_owner_user(self.db)
         owner = user_id or settings.SINGLETON_OWNER_ID
 
@@ -210,6 +216,7 @@ class PracticeService:
             score=score,
             feedback_zh=feedback,
             model_answer=model_answer,
+            daily_ai_limit_reached=limit_reached,
         )
 
     def list_recent(
@@ -336,7 +343,14 @@ class PracticeService:
             return topic
         return random.choice(["daily", "academic", "travel", "work"])
 
-    def _check_daily_limit(self, user_id: str | None) -> None:
+    def _check_daily_limit(self, user_id: str | None) -> bool:
+        """Return True once today's AI practice usage reaches the configured limit.
+
+        Default (AI_DAILY_LIMIT_ENFORCE=false) is warn-only: usage isn't blocked
+        since this runs on the free Gemini tier and resets daily — callers surface
+        the returned flag so the UI can show a heads-up. Set
+        AI_DAILY_LIMIT_ENFORCE=true to make this a hard 429 again.
+        """
         owner = user_id or settings.SINGLETON_OWNER_ID
         since = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
         try:
@@ -349,13 +363,17 @@ class PracticeService:
             ).data or []
         except Exception:
             # Table missing → skip limit (grade will still fail clearly on insert)
-            return
+            logger.warning("practice_dialogues daily-limit lookup failed; skipping limit check")
+            return False
+
         # Each graded answer counts; leave headroom for prompt+grade pairs
-        if len(rows) >= settings.DAILY_AI_REQUEST_LIMIT:
+        limit_reached = len(rows) >= settings.DAILY_AI_REQUEST_LIMIT
+        if limit_reached and settings.AI_DAILY_LIMIT_ENFORCE:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"今日 AI 練習已達上限（{settings.DAILY_AI_REQUEST_LIMIT}）。明天再試。",
             )
+        return limit_reached
 
     def _gemini_json(self, system: str, user_msg: str) -> dict:
         try:

@@ -275,6 +275,9 @@ function NotionSync() {
   const [selectedVocab, setSelectedVocab] = useState<Set<number>>(new Set());
   const [forceOverwriteGrammar, setForceOverwriteGrammar] = useState<Set<string>>(new Set());
   const [selectedArchive, setSelectedArchive] = useState<Set<string>>(new Set());
+  const [selectedArchiveVocab, setSelectedArchiveVocab] = useState<Set<string>>(new Set());
+  const [expandedVocabDiff, setExpandedVocabDiff] = useState<Set<number>>(new Set());
+  const [vocabFieldOverwrites, setVocabFieldOverwrites] = useState<Record<string, Set<string>>>({});
   const [forceConfirm, setForceConfirm] = useState(false);
   const [result, setResult] = useState<IngestionResponse | null>(null);
   const [error, setError] = useState("");
@@ -287,6 +290,9 @@ function NotionSync() {
     setResult(null);
     setForceOverwriteGrammar(new Set());
     setSelectedArchive(new Set());
+    setSelectedArchiveVocab(new Set());
+    setExpandedVocabDiff(new Set());
+    setVocabFieldOverwrites({});
     setForceConfirm(false);
     try {
       const res = await api.notionSync(focus, pageId.trim() || undefined);
@@ -330,6 +336,12 @@ function NotionSync() {
           force: forceConfirm,
           force_overwrite_grammar_block_ids: [...forceOverwriteGrammar],
           archive_grammar_ids: [...selectedArchive],
+          archive_vocab_ids: [...selectedArchiveVocab],
+          vocab_field_overwrites: Object.fromEntries(
+            Object.entries(vocabFieldOverwrites)
+              .filter(([, fields]) => fields.size > 0)
+              .map(([vocabId, fields]) => [vocabId, [...fields]]),
+          ),
         },
       );
       setResult(res);
@@ -362,11 +374,30 @@ function NotionSync() {
     });
   }
 
+  function toggleVocabDiffExpanded(index: number) {
+    toggleSet(setExpandedVocabDiff, index);
+  }
+
+  function toggleVocabFieldOverwrite(vocabId: string, field: string) {
+    setVocabFieldOverwrites((prev) => {
+      const current = new Set(prev[vocabId] ?? []);
+      if (current.has(field)) current.delete(field);
+      else current.add(field);
+      return { ...prev, [vocabId]: current };
+    });
+  }
+
+  function formatExamples(examples?: { japanese: string; chinese?: string }[]): string {
+    if (!examples || examples.length === 0) return "（無）";
+    return examples.map((ex) => ex.japanese + (ex.chinese ? ` → ${ex.chinese}` : "")).join("；");
+  }
+
   const hasPreviewItems =
     preview &&
     (preview.parsed.grammars.length > 0 ||
       preview.parsed.vocabularies.length > 0 ||
-      preview.orphaned_grammars.length > 0);
+      preview.orphaned_grammars.length > 0 ||
+      preview.orphaned_vocabularies.length > 0);
 
   return (
     <div className="space-y-4">
@@ -521,7 +552,7 @@ function NotionSync() {
           {preview.parsed.vocabularies.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-stone-500">
-                單字（已存在者不覆寫意思，只補空例句／筆記）
+                單字（預設只補空例句／筆記；有變更可展開選擇要覆蓋的欄位）
               </p>
               {preview.parsed.vocabularies.map((item, index) => {
                 const isNew = item.sync_change === "new";
@@ -531,36 +562,104 @@ function NotionSync() {
                   : isUpdated
                     ? "ring-amber-200 bg-amber-50/40"
                     : "ring-stone-100";
+                const expanded = expandedVocabDiff.has(index);
+                const vocabId = item.vocab_id;
+                const overwriteSet = vocabId ? vocabFieldOverwrites[vocabId] : undefined;
+                const diffRows = [
+                  {
+                    field: "meaning_zh",
+                    label: "意思",
+                    notion: item.definitions[0]?.meaning_zh,
+                    current: item.current_meaning_zh,
+                  },
+                  {
+                    field: "notes_zh",
+                    label: "補充筆記",
+                    notion: item.definitions[0]?.notes_zh,
+                    current: item.current_notes_zh,
+                  },
+                  {
+                    field: "example_sentences",
+                    label: "例句",
+                    notion: formatExamples(item.definitions[0]?.example_sentences),
+                    current: formatExamples(item.current_example_sentences),
+                  },
+                ];
                 return (
-                  <label
+                  <div
                     key={`${item.word}-${index}`}
-                    className={`flex gap-3 rounded-xl bg-white p-3 ring-1 ${ring}`}
+                    className={`rounded-xl bg-white p-3 ring-1 ${ring}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedVocab.has(index)}
-                      onChange={() => toggleSet(setSelectedVocab, index)}
-                      className="mt-1"
-                    />
-                    <div>
-                      <p className="font-medium">
-                        {item.word}
-                        {isNew && (
-                          <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-700">
-                            全新
-                          </span>
+                    <label className="flex gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedVocab.has(index)}
+                        onChange={() => toggleSet(setSelectedVocab, index)}
+                        className="mt-1"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
+                          {item.word}
+                          {isNew && (
+                            <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-700">
+                              全新
+                            </span>
+                          )}
+                          {isUpdated && (
+                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-800">
+                              有變更
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-stone-500">
+                          {item.reading} — {item.definitions[0]?.meaning_zh}
+                        </p>
+                      </div>
+                    </label>
+
+                    {isUpdated && vocabId && (
+                      <div className="mt-2 pl-7">
+                        <button
+                          type="button"
+                          onClick={() => toggleVocabDiffExpanded(index)}
+                          className="text-xs font-medium text-amber-800 underline decoration-dotted"
+                        >
+                          {expanded ? "收合差異" : "顯示 Notion／App 差異"}
+                        </button>
+
+                        {expanded && (
+                          <div className="mt-2 space-y-2 rounded-lg bg-amber-50/60 p-3 ring-1 ring-amber-100">
+                            {diffRows.map((row) => (
+                              <label key={row.field} className="flex items-start gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={overwriteSet?.has(row.field) ?? false}
+                                  onChange={() =>
+                                    toggleVocabFieldOverwrite(vocabId, row.field)
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span className="min-w-0 flex-1 text-xs">
+                                  <span className="font-semibold text-stone-700">
+                                    {row.label}
+                                  </span>
+                                  <span className="mt-0.5 block text-stone-500">
+                                    Notion：{row.notion || "（無）"}
+                                  </span>
+                                  <span className="block text-stone-400">
+                                    App：{row.current || "（無）"}
+                                  </span>
+                                </span>
+                              </label>
+                            ))}
+                            <p className="text-[11px] text-amber-700">
+                              勾選欄位＝確認匯入時以 Notion 內容覆蓋；不勾＝維持現狀（僅補空欄位）。
+                            </p>
+                          </div>
                         )}
-                        {isUpdated && (
-                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-800">
-                            有變更
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-stone-500">
-                        {item.reading} — {item.definitions[0]?.meaning_zh}
-                      </p>
-                    </div>
-                  </label>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -591,6 +690,36 @@ function NotionSync() {
             </div>
           )}
 
+          {preview.orphaned_vocabularies.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-stone-500">
+                單字：Notion 已移除 · App 仍有（勾選則 archive）
+              </p>
+              {preview.orphaned_vocabularies.map((item) => (
+                <label
+                  key={item.id}
+                  className="flex gap-3 rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedArchiveVocab.has(item.id)}
+                    onChange={() => toggleBlockId(setSelectedArchiveVocab, item.id)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-medium text-stone-700">
+                      {item.word}
+                      {item.reading && (
+                        <span className="ml-1 text-xs text-stone-400">（{item.reading}）</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-stone-500">僅存在於 App，Notion 頁面已找不到</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+
           <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs text-stone-600 ring-1 ring-stone-100">
             <input
               type="checkbox"
@@ -608,7 +737,8 @@ function NotionSync() {
                 confirming ||
                 (selectedGrammar.size === 0 &&
                   selectedVocab.size === 0 &&
-                  selectedArchive.size === 0)
+                  selectedArchive.size === 0 &&
+                  selectedArchiveVocab.size === 0)
               }
               className="flex-1 rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md transition hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
             >

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -43,8 +43,10 @@ class VocabService:
         offset: int = 0,
         q: str | None = None,
     ) -> tuple[list[VocabularySummary], int]:
-        query = self.db.table("vocabularies").select(
-            "id, word, reading, jlpt_level", count="exact"
+        query = (
+            self.db.table("vocabularies")
+            .select("id, word, reading, jlpt_level", count="exact")
+            .neq("sync_status", "archived")
         )
         if jlpt:
             query = query.eq("jlpt_level", jlpt.value)
@@ -99,14 +101,37 @@ class VocabService:
     ) -> VocabularyOut:
         exists = (
             self.db.table("vocabularies")
-            .select("id")
+            .select("id, sync_status")
             .eq("id", str(vocabulary_id))
             .maybe_single()
             .execute()
         )
         if exists is None or not exists.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vocabulary not found")
+        if exists.data.get("sync_status") == "archived":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vocabulary not found")
         return self._load_vocab_out(vocabulary_id, user_id=user_id)
+
+    def archive_vocabulary(self, vocabulary_id: UUID) -> None:
+        existing = (
+            self.db.table("vocabularies")
+            .select("id, sync_status, content_hash")
+            .eq("id", str(vocabulary_id))
+            .maybe_single()
+            .execute()
+        )
+        if existing is None or not existing.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vocabulary not found")
+        if existing.data.get("sync_status") == "archived":
+            return
+        # Free unique content_hash so the word can be re-added later without conflict.
+        old_hash = existing.data.get("content_hash") or str(vocabulary_id)
+        self.db.table("vocabularies").update(
+            {
+                "sync_status": "archived",
+                "content_hash": f"archived:{vocabulary_id}:{old_hash}",
+            }
+        ).eq("id", str(vocabulary_id)).execute()
 
     def record_view(self, user_id: str | None, vocabulary_id: UUID) -> ReviewScoreOut:
         self.get_vocab(vocabulary_id)
@@ -136,7 +161,9 @@ class VocabService:
         exclude_id: UUID | None = None,
         jlpt: JlptLevel | None = None,
     ) -> VocabularyOut:
-        query = self.db.table("vocabularies").select("id")
+        query = (
+            self.db.table("vocabularies").select("id").neq("sync_status", "archived")
+        )
         if jlpt:
             query = query.eq("jlpt_level", jlpt.value)
         rows = (query.execute()).data or []
@@ -246,6 +273,7 @@ class VocabService:
         count_result = (
             self.db.table("vocabularies")
             .select("id", count="exact")
+            .neq("sync_status", "archived")
             .limit(1)
             .execute()
         )
@@ -254,6 +282,7 @@ class VocabService:
         result = (
             self.db.table("vocabularies")
             .select("id")
+            .neq("sync_status", "archived")
             .order("created_at")
             .range(offset, offset + limit - 1)
             .execute()
@@ -276,16 +305,19 @@ class VocabService:
         Mixed review deck (day-stable):
           - due cards (shuffled)
           - never-reviewed cards
-          - low-score early reviews (not yet due)
-        Each block prefers ~5 due / 2 new / 3 low-score.
+          - low-score early reviews (not yet due, outside the cooldown window)
+        Each block prefers ~4 due / 4 new / 2 low-score.
         """
         from app.services.review_queue import build_mixed_review_queue, daily_seed
 
-        now_iso = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+        cooldown_since_iso = (now - timedelta(hours=24)).isoformat()
 
         total_vocab = (
             self.db.table("vocabularies")
             .select("id", count="exact")
+            .neq("sync_status", "archived")
             .limit(1)
             .execute()
         ).count or 0
@@ -302,7 +334,7 @@ class VocabService:
 
         all_progress = (
             self.db.table("user_vocab_progress")
-            .select("vocabulary_id, review_score")
+            .select("vocabulary_id, review_score, updated_at")
             .eq("user_id", user_id)
             .execute()
         ).data or []
@@ -310,10 +342,16 @@ class VocabService:
         score_map = {
             r["vocabulary_id"]: float(r.get("review_score") or 0) for r in all_progress
         }
+        cooldown_ids = {
+            r["vocabulary_id"]
+            for r in all_progress
+            if (r.get("updated_at") or "") >= cooldown_since_iso
+        }
 
         unseen_rows = (
             self.db.table("vocabularies")
             .select("id")
+            .neq("sync_status", "archived")
             .order("created_at")
             .execute()
         ).data or []
@@ -324,6 +362,7 @@ class VocabService:
             new_ids=new_ids,
             score_by_id=score_map,
             seed=daily_seed(user_id, "vocab"),
+            cooldown_ids=cooldown_ids,
         )
         total_available = len(combined)
         page = combined[offset : offset + limit]

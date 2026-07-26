@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -324,7 +324,9 @@ class GrammarService:
     ) -> GrammarReviewBatch:
         from app.services.review_queue import build_mixed_review_queue, daily_seed
 
-        now_iso = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+        cooldown_since_iso = (now - timedelta(hours=24)).isoformat()
         total_grammar = (
             self.db.table("grammars")
             .select("id", count="exact")
@@ -345,13 +347,18 @@ class GrammarService:
 
         all_progress = (
             self.db.table("user_grammar_progress")
-            .select("grammar_id, review_score")
+            .select("grammar_id, review_score, updated_at")
             .eq("user_id", user_id)
             .execute()
         ).data or []
         seen_ids = {r["grammar_id"] for r in all_progress}
         score_map = {
             r["grammar_id"]: float(r.get("review_score") or 0) for r in all_progress
+        }
+        cooldown_ids = {
+            r["grammar_id"]
+            for r in all_progress
+            if (r.get("updated_at") or "") >= cooldown_since_iso
         }
 
         unseen_rows = (
@@ -368,6 +375,7 @@ class GrammarService:
             new_ids=new_ids,
             score_by_id=score_map,
             seed=daily_seed(user_id, "grammar"),
+            cooldown_ids=cooldown_ids,
         )
         total_available = len(combined)
         page = combined[offset : offset + limit]

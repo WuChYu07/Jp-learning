@@ -35,6 +35,14 @@ class VocabularyItemInput(BaseModel):
     jlpt_level: JlptLevel = JlptLevel.UNKNOWN
     definitions: list[VocabularyDefinitionBase] = Field(min_length=1)
     sync_change: SyncChange | None = None
+    notion_page_id: str | None = None
+    # Set during diff annotation for existing rows (see annotate_vocab_sync_changes).
+    vocab_id: str | None = None
+    # DB's current field values, attached only when sync_change == "updated",
+    # so the preview can show a Notion-vs-App diff for per-field force overwrite.
+    current_meaning_zh: str | None = None
+    current_notes_zh: str | None = None
+    current_example_sentences: list[ExampleSentence] = Field(default_factory=list)
 
     @field_validator("jlpt_level", mode="before")
     @classmethod

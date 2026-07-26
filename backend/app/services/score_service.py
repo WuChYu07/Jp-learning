@@ -37,8 +37,12 @@ def clamp_points(value: int) -> int:
 
 
 def sample_weight(score: float) -> float:
-    """Higher weight for lower scores. Missing progress treated as 0."""
-    return (100.0 - float(score) + 1.0) ** 2
+    """Higher weight for lower scores. Missing progress treated as 0.
+
+    Linear (not squared) so a couple of rock-bottom scores don't monopolize
+    every draw and crowd out other below-average words.
+    """
+    return 100.0 - float(score) + 1.0
 
 
 @dataclass

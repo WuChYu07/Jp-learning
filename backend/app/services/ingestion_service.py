@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -23,6 +24,8 @@ from app.services.hash_service import (
     vocab_source_hash,
 )
 from app.services.text_sanitize import clean_text
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,6 +83,10 @@ class IngestionService:
                     parsed.grammars, ingestion_id, user_id
                 )
             except Exception:
+                logger.exception(
+                    "_persist_notion_grammars_bulk failed; falling back to "
+                    "_persist_grammars_bulk (notion_block_id linkage will be lost for this batch)"
+                )
                 grammar_stats = self._persist_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id, source_type
                 )
@@ -111,6 +118,7 @@ class IngestionService:
         file_name: str | None = None,
         *,
         skip_ingestion_cache: bool = False,
+        vocab_field_overwrites: dict[str, list[str]] | None = None,
     ) -> IngestionResponse:
         """Save pre-parsed data (from text preview confirm) to DB."""
         if not skip_ingestion_cache:
@@ -127,7 +135,11 @@ class IngestionService:
         )
 
         vocab_stats = self._persist_vocabularies_bulk(
-            parsed.vocabularies, ingestion_id, user_id, source_type
+            parsed.vocabularies,
+            ingestion_id,
+            user_id,
+            source_type,
+            vocab_field_overwrites=vocab_field_overwrites,
         )
         if source_type == SourceType.NOTION and any(
             item.notion_block_id for item in parsed.grammars
@@ -137,6 +149,10 @@ class IngestionService:
                     parsed.grammars, ingestion_id, user_id
                 )
             except Exception:
+                logger.exception(
+                    "_persist_notion_grammars_bulk failed; falling back to "
+                    "_persist_grammars_bulk (notion_block_id linkage will be lost for this batch)"
+                )
                 grammar_stats = self._persist_grammars_bulk(
                     parsed.grammars, ingestion_id, user_id, source_type
                 )
@@ -228,6 +244,7 @@ class IngestionService:
         ingestion_id: UUID,
         user_id: str | None,
         source_type: SourceType,
+        vocab_field_overwrites: dict[str, list[str]] | None = None,
     ) -> PersistStats:
         if not items:
             return PersistStats()
@@ -263,6 +280,9 @@ class IngestionService:
                         )
                         if source_type == SourceType.NOTION
                         else None
+                    ),
+                    "notion_page_id": (
+                        item.notion_page_id if source_type == SourceType.NOTION else None
                     ),
                 }
             )
@@ -300,7 +320,11 @@ class IngestionService:
             h for h in hash_map if h in id_by_hash and id_by_hash[h] not in newly_inserted
         ]
         gap_updated = self._fill_vocab_definition_gaps(
-            hash_map, id_by_hash, existing_hashes, source_type
+            hash_map,
+            id_by_hash,
+            existing_hashes,
+            source_type,
+            vocab_field_overwrites=vocab_field_overwrites,
         )
 
         existing_count = len(existing_hashes)
@@ -318,15 +342,20 @@ class IngestionService:
         id_by_hash: dict[str, UUID],
         existing_hashes: list[str],
         source_type: SourceType,
+        vocab_field_overwrites: dict[str, list[str]] | None = None,
     ) -> int:
-        """For already-synced vocab, write Notion examples/notes only into empty fields.
+        """For already-synced vocab, write Notion content into empty fields by
+        default; fields explicitly listed in `vocab_field_overwrites` for that
+        vocab id are written with Notion's value even if already populated
+        (used for the per-field "force overwrite" choice in the sync preview).
 
         Also refreshes `notion_source_hash` for Notion syncs so the next diff
         compares against what Notion has now, independent of AI-enriched content.
 
-        Returns the number of existing rows that actually received a gap fill.
+        Returns the number of existing rows that actually received a write.
         """
         updated = 0
+        overwrites = vocab_field_overwrites or {}
         for entry_hash in existing_hashes:
             item = hash_map.get(entry_hash)
             if not item or not item.definitions:
@@ -340,20 +369,27 @@ class IngestionService:
                 )
                 (
                     self.db.table("vocabularies")
-                    .update({"notion_source_hash": notion_hash})
+                    .update(
+                        {
+                            "notion_source_hash": notion_hash,
+                            "notion_page_id": item.notion_page_id,
+                        }
+                    )
                     .eq("id", str(vocab_id))
                     .execute()
                 )
 
             parsed = item.definitions[0]
+            force_fields = set(overwrites.get(str(vocab_id), []))
             has_examples = bool(parsed.example_sentences)
             has_notes = bool((parsed.notes_zh or "").strip())
-            if not has_examples and not has_notes:
+            has_meaning = bool((parsed.meaning_zh or "").strip())
+            if not has_examples and not has_notes and not force_fields:
                 continue
 
             existing_defs = (
                 self.db.table("vocabulary_definitions")
-                .select("id, example_sentences, notes_zh")
+                .select("id, meaning_zh, example_sentences, notes_zh")
                 .eq("vocabulary_id", str(vocab_id))
                 .order("sort_order")
                 .limit(1)
@@ -363,12 +399,23 @@ class IngestionService:
                 continue
             row = existing_defs[0]
             updates: dict = {}
-            if has_examples and not (row.get("example_sentences") or []):
+
+            if has_meaning and "meaning_zh" in force_fields:
+                updates["meaning_zh"] = clean_text(parsed.meaning_zh)
+
+            if has_examples and (
+                "example_sentences" in force_fields
+                or not (row.get("example_sentences") or [])
+            ):
                 updates["example_sentences"] = [
                     ex.model_dump(mode="json") for ex in parsed.example_sentences
                 ]
-            if has_notes and not (row.get("notes_zh") or "").strip():
+
+            if has_notes and (
+                "notes_zh" in force_fields or not (row.get("notes_zh") or "").strip()
+            ):
                 updates["notes_zh"] = clean_text(parsed.notes_zh)
+
             if updates:
                 (
                     self.db.table("vocabulary_definitions")
@@ -559,6 +606,11 @@ class IngestionService:
                     .execute()
                 )
                 if fallback is None or not fallback.data:
+                    logger.warning(
+                        "grammar insert conflicted for content_hash %s but no matching row "
+                        "was found on fallback lookup; skipping this item",
+                        entry_hash,
+                    )
                     stats.skipped += 1
                     continue
                 if fallback.data.get("sync_status") == "archived":

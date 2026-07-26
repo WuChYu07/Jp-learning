@@ -30,6 +30,13 @@ class NotionOrphanedGrammar(BaseModel):
     notion_page_id: str | None = None
 
 
+class NotionOrphanedVocab(BaseModel):
+    id: str
+    word: str
+    reading: str | None = None
+    notion_page_id: str | None = None
+
+
 class NotionSyncPreview(BaseModel):
     focus: NotionFocus
     page_id: str
@@ -50,6 +57,7 @@ class NotionSyncPreview(BaseModel):
     vocab_updated_count: int = 0
     vocab_unchanged_count: int = 0
     orphaned_grammars: list[NotionOrphanedGrammar] = Field(default_factory=list)
+    orphaned_vocabularies: list[NotionOrphanedVocab] = Field(default_factory=list)
     sources: list[NotionPageSource] = Field(default_factory=list)
 
 
@@ -62,3 +70,7 @@ class NotionConfirmRequest(BaseModel):
     force: bool = False
     force_overwrite_grammar_block_ids: list[str] = Field(default_factory=list)
     archive_grammar_ids: list[str] = Field(default_factory=list)
+    archive_vocab_ids: list[str] = Field(default_factory=list)
+    # vocabulary_id -> field names ("meaning_zh" | "notes_zh" | "example_sentences")
+    # to force-overwrite with Notion's value even if the DB field is non-empty.
+    vocab_field_overwrites: dict[str, list[str]] = Field(default_factory=dict)

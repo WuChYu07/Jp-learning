@@ -19,6 +19,7 @@ type SwipeFlashcardProps = {
   onRateHard?: () => void;
   onRateEasy?: () => void;
   disabled?: boolean;
+  cornerBadge?: ReactNode;
 };
 
 export default function SwipeFlashcard({
@@ -31,6 +32,7 @@ export default function SwipeFlashcard({
   onRateHard,
   onRateEasy,
   disabled = false,
+  cornerBadge,
 }: SwipeFlashcardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
@@ -183,6 +185,10 @@ export default function SwipeFlashcard({
 
         {/* Sparkle on right-swipe exit */}
         {exiting === "right" && <div aria-hidden className="swipe-sparkle" />}
+
+        {cornerBadge && (
+          <div className="absolute right-4 top-4 z-20">{cornerBadge}</div>
+        )}
 
         <div className="swipe-card-body relative z-10 w-full">{!flipped ? front : back}</div>
       </div>

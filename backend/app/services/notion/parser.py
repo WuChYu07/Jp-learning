@@ -177,7 +177,9 @@ def parse_blocks(
         grammars = _parse_grammar_blocks(blocks, notion_page_id=notion_page_id)
     if focus in {"vocabulary", "both"}:
         section_list = sections if sections is not None else build_sections(blocks)
-        vocabularies = _parse_vocab_sections(section_list, blocks)
+        vocabularies = _parse_vocab_sections(
+            section_list, blocks, notion_page_id=notion_page_id
+        )
 
     return IngestionParseResult(vocabularies=vocabularies, grammars=grammars)
 
@@ -488,6 +490,8 @@ def _extract_examples(lines: list[str]) -> list[ExampleSentence]:
 def _parse_vocab_sections(
     sections: list[SectionPreview],
     blocks: list[FlatBlock],
+    *,
+    notion_page_id: str | None = None,
 ) -> list[VocabularyItemInput]:
     vocabularies: list[VocabularyItemInput] = []
     seen: set[tuple[str, str]] = set()
@@ -495,6 +499,7 @@ def _parse_vocab_sections(
     def _add(vocab: VocabularyItemInput | None) -> None:
         if not vocab:
             return
+        vocab.notion_page_id = notion_page_id
         key = (vocab.word, vocab.reading or "")
         if key not in seen:
             seen.add(key)

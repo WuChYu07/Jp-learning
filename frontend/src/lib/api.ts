@@ -212,6 +212,7 @@ export type PracticePrompt = {
   prompt_zh?: string | null;
   prompt_ja?: string | null;
   hints: PracticeHint[];
+  daily_ai_limit_reached?: boolean;
 };
 
 export type PracticeGradeResult = {
@@ -219,6 +220,7 @@ export type PracticeGradeResult = {
   score: number;
   feedback_zh: string;
   model_answer?: string | null;
+  daily_ai_limit_reached?: boolean;
 };
 
 export type PracticeDialogue = {
@@ -346,9 +348,15 @@ export type NotionVocabItem = {
   word: string;
   reading?: string;
   sync_change?: "new" | "updated" | "unchanged";
+  vocab_id?: string;
+  current_meaning_zh?: string;
+  current_notes_zh?: string;
+  current_example_sentences?: ExampleSentence[];
   definitions: Array<{
     part_of_speech?: string;
     meaning_zh: string;
+    example_sentences?: ExampleSentence[];
+    notes_zh?: string;
   }>;
 };
 
@@ -356,6 +364,13 @@ export type NotionOrphanedGrammar = {
   id: string;
   grammar_point: string;
   notion_block_id?: string;
+  notion_page_id?: string;
+};
+
+export type NotionOrphanedVocab = {
+  id: string;
+  word: string;
+  reading?: string;
   notion_page_id?: string;
 };
 
@@ -392,6 +407,7 @@ export type NotionSyncPreview = {
   vocab_updated_count: number;
   vocab_unchanged_count: number;
   orphaned_grammars: NotionOrphanedGrammar[];
+  orphaned_vocabularies: NotionOrphanedVocab[];
   sources: NotionPageSource[];
 };
 
@@ -738,6 +754,8 @@ export const api = {
       force?: boolean;
       force_overwrite_grammar_block_ids?: string[];
       archive_grammar_ids?: string[];
+      archive_vocab_ids?: string[];
+      vocab_field_overwrites?: Record<string, string[]>;
     },
   ) =>
     request<IngestionResponse>("/api/v1/notion/confirm", {
@@ -752,6 +770,8 @@ export const api = {
         force_overwrite_grammar_block_ids:
           options?.force_overwrite_grammar_block_ids ?? [],
         archive_grammar_ids: options?.archive_grammar_ids ?? [],
+        archive_vocab_ids: options?.archive_vocab_ids ?? [],
+        vocab_field_overwrites: options?.vocab_field_overwrites ?? {},
       }),
     }),
 

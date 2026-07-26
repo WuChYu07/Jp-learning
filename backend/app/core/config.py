@@ -46,8 +46,10 @@ class Settings(BaseSettings):
     # Only keep neighbors within this gap of the best match (filters soft clusters).
     EMBEDDING_MAX_SCORE_GAP: float = 0.015
 
-    # Rate limiting
+    # Rate limiting — free tier resets daily, so by default this only warns
+    # (see AI_DAILY_LIMIT_ENFORCE) rather than blocking usage.
     DAILY_AI_REQUEST_LIMIT: int = 50
+    AI_DAILY_LIMIT_ENFORCE: bool = False
 
     # SRS
     SRS_DEFAULT_EASINESS_FACTOR: float = 2.5
