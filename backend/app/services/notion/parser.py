@@ -163,18 +163,63 @@ class _GrammarDraft:
         )
 
 
+@dataclass
+class HeadingCandidate:
+    """A top-level heading_1 + its immediate heading_2 child titles, worth
+    asking an AI classifier whether it's a category label (children should
+    each become an independent grammar point) or a grammar point itself
+    (children are usage variants). See notion/heading_classifier.py.
+    """
+
+    block_id: str
+    heading_text: str
+    children: list[str]
+
+
+def collect_heading_candidates(blocks: list[FlatBlock]) -> list[HeadingCandidate]:
+    """Top-level headings (excluding known structural dividers) with 2+
+    immediate heading_2 children — the ambiguous cases where the parser can't
+    tell, from rules alone, whether the heading is a category or a topic.
+    """
+    candidates: list[HeadingCandidate] = []
+    for idx, block in enumerate(blocks):
+        if block.type != "heading_1" or block.depth != 0:
+            continue
+        text = block.text.strip()
+        if not text or _is_skip_h1(text):
+            continue
+
+        children: list[str] = []
+        for child in blocks[idx + 1 :]:
+            if child.type == "heading_1" and child.depth == 0:
+                break
+            if child.type == "heading_2" and child.depth == 1:
+                child_text = child.text.strip()
+                if child_text:
+                    children.append(child_text)
+
+        if len(children) >= 2:
+            candidates.append(
+                HeadingCandidate(block_id=block.id, heading_text=text, children=children)
+            )
+    return candidates
+
+
 def parse_blocks(
     blocks: list[FlatBlock],
     *,
     focus: str = "both",
     sections: list[SectionPreview] | None = None,
     notion_page_id: str | None = None,
+    category_block_ids: set[str] | None = None,
 ) -> IngestionParseResult:
     grammars: list[GrammarItemInput] = []
     vocabularies: list[VocabularyItemInput] = []
 
     if focus in {"grammar", "both"}:
-        grammars = _parse_grammar_blocks(blocks, notion_page_id=notion_page_id)
+        grammars = _parse_grammar_blocks(
+            blocks, notion_page_id=notion_page_id, category_block_ids=category_block_ids
+        )
     if focus in {"vocabulary", "both"}:
         section_list = sections if sections is not None else build_sections(blocks)
         vocabularies = _parse_vocab_sections(
@@ -205,9 +250,11 @@ def _parse_grammar_blocks(
     blocks: list[FlatBlock],
     *,
     notion_page_id: str | None = None,
+    category_block_ids: set[str] | None = None,
 ) -> list[GrammarItemInput]:
     grammars: list[GrammarItemInput] = []
     seen: set[str] = set()
+    category_ids = category_block_ids or set()
 
     mode = _ParseMode.IDLE
     anchor_depth = 0
@@ -256,7 +303,7 @@ def _parse_grammar_blocks(
                     mode = _ParseMode.IDLE
                     continue
 
-                if _is_container_h1(text):
+                if block.id in category_ids:
                     flush()
                     mode = _ParseMode.CONTAINER
                     anchor_depth = block.depth
@@ -364,13 +411,6 @@ def _is_skip_h1(text: str) -> bool:
     return text.strip() in SKIP_H1
 
 
-def _is_container_h1(text: str) -> bool:
-    cleaned = text.strip()
-    if cleaned in SKIP_H1:
-        return True
-    return "補充文法" in cleaned
-
-
 def _is_meta_heading(text: str) -> bool:
     cleaned = text.strip()
     if not cleaned:
@@ -436,7 +476,7 @@ def _is_group_parent(blocks: list[FlatBlock], idx: int) -> bool:
     if block.type != "heading_1":
         return False
     text = block.text.strip()
-    if _is_skip_h1(text) or _is_container_h1(text):
+    if _is_skip_h1(text):
         return False
 
     parent_depth = block.depth

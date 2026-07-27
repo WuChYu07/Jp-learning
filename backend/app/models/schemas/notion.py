@@ -39,6 +39,15 @@ class NotionOrphanedVocab(BaseModel):
     notion_page_id: str | None = None
 
 
+class NotionUnclassifiedHeading(BaseModel):
+    """A grammar heading the AI category/topic classifier couldn't resolve
+    this run (quota exhausted, bad response, etc.) — surfaced so the user
+    knows it may need a manual look rather than being silently guessed."""
+
+    notion_block_id: str
+    heading_text: str
+
+
 class NotionSyncPreview(BaseModel):
     focus: NotionFocus
     page_id: str
@@ -60,6 +69,7 @@ class NotionSyncPreview(BaseModel):
     vocab_unchanged_count: int = 0
     orphaned_grammars: list[NotionOrphanedGrammar] = Field(default_factory=list)
     orphaned_vocabularies: list[NotionOrphanedVocab] = Field(default_factory=list)
+    unclassified_headings: list[NotionUnclassifiedHeading] = Field(default_factory=list)
     sources: list[NotionPageSource] = Field(default_factory=list)
 
 

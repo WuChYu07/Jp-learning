@@ -374,6 +374,11 @@ export type NotionOrphanedVocab = {
   notion_page_id?: string;
 };
 
+export type NotionUnclassifiedHeading = {
+  notion_block_id: string;
+  heading_text: string;
+};
+
 export type NotionPageSource = {
   focus: "vocabulary" | "grammar";
   page_id: string;
@@ -408,6 +413,7 @@ export type NotionSyncPreview = {
   vocab_unchanged_count: number;
   orphaned_grammars: NotionOrphanedGrammar[];
   orphaned_vocabularies: NotionOrphanedVocab[];
+  unclassified_headings: NotionUnclassifiedHeading[];
   sources: NotionPageSource[];
 };
 

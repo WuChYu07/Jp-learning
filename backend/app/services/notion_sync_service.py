@@ -17,6 +17,7 @@ from app.models.schemas.notion import (
     NotionOrphanedVocab,
     NotionPageSource,
     NotionSyncPreview,
+    NotionUnclassifiedHeading,
 )
 from app.services.grammar_service import grammar_service
 from app.services.hash_service import sha256_hex, vocab_entry_hash
@@ -31,7 +32,8 @@ from app.services.notion.diff import (
     find_orphaned_notion_grammars,
     find_orphaned_notion_vocab,
 )
-from app.services.notion.parser import parse_blocks
+from app.services.notion.heading_classifier import classify_headings
+from app.services.notion.parser import collect_heading_candidates, parse_blocks
 from app.services.vocab_service import vocab_service
 from app.services import storage_service
 
@@ -69,6 +71,7 @@ class NotionSyncService:
         vocab_new = vocab_updated = vocab_unchanged = 0
         grammar_page_ids: list[str] = []
         vocab_page_ids: list[str] = []
+        unclassified_headings: list[NotionUnclassifiedHeading] = []
 
         try:
             with NotionClient(settings.NOTION_TOKEN) as client:
@@ -113,12 +116,26 @@ class NotionSyncService:
                     if upload_images:
                         self._persist_images(client, blocks)
 
+                    category_block_ids: set[str] = set()
+                    if page_focus in {"grammar", "both"}:
+                        candidates = collect_heading_candidates(blocks)
+                        classification = classify_headings(candidates, self.db)
+                        category_block_ids = classification.category_block_ids
+                        unclassified_headings.extend(
+                            NotionUnclassifiedHeading(
+                                notion_block_id=f["notion_block_id"],
+                                heading_text=f["heading_text"],
+                            )
+                            for f in classification.failed
+                        )
+
                     analysis = analyze_blocks(blocks)
                     parsed = parse_blocks(
                         blocks,
                         focus=page_focus,
                         sections=analysis.sections,
                         notion_page_id=resolved_page_id,
+                        category_block_ids=category_block_ids,
                     )
                     if page_focus in {"grammar", "both"} and parsed.grammars:
                         try:
@@ -246,6 +263,7 @@ class NotionSyncService:
                 )
                 for o in orphaned_vocab
             ],
+            unclassified_headings=unclassified_headings,
             sources=sources,
         )
 

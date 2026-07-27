@@ -485,6 +485,19 @@ function NotionSync() {
             )}
           </div>
 
+          {preview.unclassified_headings.length > 0 && (
+            <div className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
+              <p className="font-semibold">
+                ⚠️ 以下 {preview.unclassified_headings.length} 個標題 AI 分類失敗，本次暫不拆分（下次同步會自動重試）：
+              </p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                {preview.unclassified_headings.map((h) => (
+                  <li key={h.notion_block_id}>{h.heading_text}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {!hasPreviewItems && (
             <div className="rounded-xl bg-stone-50 p-6 text-center text-sm text-stone-600 ring-1 ring-stone-200">
               與資料庫一致，沒有需要匯入的新增或更新項目。
