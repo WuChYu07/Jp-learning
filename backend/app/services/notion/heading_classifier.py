@@ -136,7 +136,12 @@ def _classify_via_gemini(
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.1,
-                    max_output_tokens=2048,
+                    max_output_tokens=4096,
+                    # This is a plain classification task with no need for extended
+                    # reasoning — on thinking-capable models (e.g. gemini-2.5-flash)
+                    # thinking tokens otherwise eat max_output_tokens first and can
+                    # truncate the JSON before it's complete.
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
         )
