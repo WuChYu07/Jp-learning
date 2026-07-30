@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, GraphNode, RelationGraph } from "../lib/api";
 import { vocabDisplay } from "../lib/vocabDisplay";
-import { RELATION_COLORS, RELATION_LABELS } from "./RelationLinkList";
+import { RELATION_COLORS, RELATION_LABELS, isLooseSameMeaning } from "./RelationLinkList";
 
 type Props = {
   vocabularyId: string;
@@ -44,8 +44,8 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
     };
   }, [vocabularyId]);
 
-  const relatedGrammars: Array<{ node: GraphNode; label: string; color: string }> = [];
-  const relatedVocab: Array<{ node: GraphNode; label: string; color: string }> = [];
+  const relatedGrammars: Array<{ node: GraphNode; label: string; color: string; loose: boolean }> = [];
+  const relatedVocab: Array<{ node: GraphNode; label: string; color: string; loose: boolean }> = [];
 
   if (graph) {
     const center = graph.center_id;
@@ -54,10 +54,12 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
       const otherId = edge.source === center ? edge.target : edge.source;
       const node = nodeMap.get(otherId);
       if (!node) continue;
+      const loose = isLooseSameMeaning(edge);
       const item = {
         node,
-        label: edge.label_zh || RELATION_LABELS[edge.relation_type],
+        label: loose ? "可能相關" : edge.label_zh || RELATION_LABELS[edge.relation_type],
         color: RELATION_COLORS[edge.relation_type],
+        loose,
       };
       if (node.type === "grammar") relatedGrammars.push(item);
       if (node.type === "vocabulary") relatedVocab.push(item);
@@ -116,19 +118,20 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
         <div>
           <p className="mb-1 text-[11px] text-sky-800">近義單字</p>
           <ul className="flex flex-wrap gap-2">
-            {relatedVocab.slice(0, 8).map(({ node, color }) => (
+            {relatedVocab.slice(0, 8).map(({ node, color, loose, label }) => (
               <li key={node.id}>
                 <button
                   type="button"
                   onClick={() => goVocab(node)}
-                  title="前往該單字"
+                  title={loose ? `可能相關（非嚴格同義）` : "前往該單字"}
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-sky-900 underline-offset-2 ring-1 ring-sky-100 transition hover:bg-sky-100 hover:underline"
                 >
                   <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: color }}
+                    className={loose ? "h-1.5 w-1.5 rounded-full border" : "h-1.5 w-1.5 rounded-full"}
+                    style={loose ? { borderColor: color } : { backgroundColor: color }}
                   />
                   {formatVocabNodeLabel(node.label, node.jlpt_level)}
+                  {loose && <span className="text-[10px] text-stone-400">（{label}）</span>}
                 </button>
               </li>
             ))}
@@ -139,7 +142,7 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
         <div>
           <p className="mb-1 text-[11px] text-sky-800">相關文法</p>
           <ul className="flex flex-wrap gap-2">
-            {relatedGrammars.slice(0, 8).map(({ node, color }) => (
+            {relatedGrammars.slice(0, 8).map(({ node, color, loose, label }) => (
               <li key={node.id}>
                 <button
                   type="button"
@@ -148,13 +151,15 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
                       state: { grammarId: node.id.replace(/^grammar:/, "") },
                     })
                   }
+                  title={loose ? "可能相關（非嚴格同義）" : undefined}
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-stone-700 ring-1 ring-sky-100 transition hover:bg-sky-100"
                 >
                   <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: color }}
+                    className={loose ? "h-1.5 w-1.5 rounded-full border" : "h-1.5 w-1.5 rounded-full"}
+                    style={loose ? { borderColor: color } : { backgroundColor: color }}
                   />
                   {node.label}
+                  {loose && <span className="text-[10px] text-stone-400">（{label}）</span>}
                 </button>
               </li>
             ))}

@@ -181,12 +181,21 @@ def recompute_semantic_links(
     ),
     limit: int = Query(default=40, ge=1, le=120),
     force: bool = Query(default=False),
+    scope: str = Query(
+        default="recent",
+        description=(
+            "'recent': capped at limit, never-embedded entities first so repeated "
+            "calls make progress. 'all_new': ignore limit, process every entity "
+            "that has never been embedded at all."
+        ),
+    ),
 ) -> dict:
-    """Batch recompute embeddings + same_meaning links for recent entities."""
+    """Batch recompute embeddings + same_meaning links."""
     return semantic_link_service.recompute_semantic_links(
         entity_types=_parse_entity_types(entity_types),
         limit=limit,
         force=force,
+        scope=scope,
     )
 
 

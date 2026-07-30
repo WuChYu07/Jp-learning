@@ -21,6 +21,16 @@ export const RELATION_COLORS: Record<LinkRelationType, string> = {
   derived: "#059669",
 };
 
+// same_meaning links below this confidence are the looser "possibly
+// related" tier (EMBEDDING_SIMILARITY_THRESHOLD backend default) rather
+// than a strict same-meaning match — shown as an outline badge instead of
+// solid fill so the lower confidence is visible at a glance.
+const STRICT_CONFIDENCE = 0.93;
+
+export function isLooseSameMeaning(edge: GraphEdge): boolean {
+  return edge.relation_type === "same_meaning" && (edge.confidence ?? 1) < STRICT_CONFIDENCE;
+}
+
 type Props = {
   graph: RelationGraph;
   onSelectNode: (node: GraphNode) => void;
@@ -61,7 +71,9 @@ export default function RelationLinkList({ graph, onSelectNode, onDeleteEdge }: 
 
   return (
     <ul className="space-y-2">
-      {unique.map(({ edge, neighbor }) => (
+      {unique.map(({ edge, neighbor }) => {
+        const loose = isLooseSameMeaning(edge);
+        return (
         <li
           key={`${edge.id}-${neighbor.id}`}
           className="flex items-start justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2 ring-1 ring-stone-100"
@@ -73,10 +85,18 @@ export default function RelationLinkList({ graph, onSelectNode, onDeleteEdge }: 
           >
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                style={{ backgroundColor: RELATION_COLORS[edge.relation_type] }}
+                className={
+                  loose
+                    ? "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                    : "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                }
+                style={
+                  loose
+                    ? { borderColor: RELATION_COLORS[edge.relation_type], color: RELATION_COLORS[edge.relation_type] }
+                    : { backgroundColor: RELATION_COLORS[edge.relation_type] }
+                }
               >
-                {edge.label_zh || RELATION_LABELS[edge.relation_type]}
+                {loose ? "可能相關" : edge.label_zh || RELATION_LABELS[edge.relation_type]}
               </span>
               <span className="truncate text-sm font-semibold text-stone-800">
                 {neighbor.label}
@@ -100,7 +120,8 @@ export default function RelationLinkList({ graph, onSelectNode, onDeleteEdge }: 
             </button>
           )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

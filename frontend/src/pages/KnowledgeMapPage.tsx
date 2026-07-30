@@ -22,6 +22,7 @@ const RELATION_FILTERS: Array<LinkRelationType | ""> = [
 
 const CONFIDENCE_PRESETS = [
   { value: 0, label: "全部信心" },
+  { value: 0.85, label: "≥ 0.85（含可能相關）" },
   { value: 0.9, label: "≥ 0.90" },
   { value: 0.93, label: "≥ 0.93（建議）" },
   { value: 0.95, label: "≥ 0.95" },
@@ -159,6 +160,37 @@ export default function KnowledgeMapPage() {
     }
   };
 
+  const handleRecomputeAllNew = async () => {
+    if (
+      !confirm(
+        "重算「所有從未計算過」的文法／單字語意關聯？\n" +
+          "不設數量上限，適合大量匯入後一次清完積壓。\n" +
+          "會依未處理數量呼叫對應次數的 Gemini embedding，數量多時可能需要幾分鐘，且花費較多額度。",
+      )
+    ) {
+      return;
+    }
+    setBusy("recompute-all");
+    setError("");
+    setInfo("");
+    try {
+      const res = await api.recomputeSemanticLinks({
+        entity_types: includeVocab ? "grammar,vocabulary" : "grammar",
+        force: true,
+        scope: "all_new",
+      });
+      setInfo(
+        `處理 ${res.entities} 筆從未計算過的項目：新增 ${res.links_created}、更新 ${res.links_updated}、移除 ${res.links_removed}` +
+          (res.failed ? `、失敗 ${res.failed}` : ""),
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "重算失敗");
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -252,6 +284,15 @@ export default function KnowledgeMapPage() {
           className="rounded-full bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-900 disabled:opacity-50"
         >
           {busy === "recompute" ? "重算中…" : "重算語意關聯"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleRecomputeAllNew()}
+          disabled={Boolean(busy)}
+          className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          title="不設上限，處理所有從未計算過的項目"
+        >
+          {busy === "recompute-all" ? "重算中…" : "全部重算（未曾處理過的）"}
         </button>
       </div>
 

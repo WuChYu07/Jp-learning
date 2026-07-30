@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     EMBEDDING_MATCH_TOP_K: int = 3
     # Only keep neighbors within this gap of the best match (filters soft clusters).
     EMBEDDING_MAX_SCORE_GAP: float = 0.015
+    # Looser tier: shown as "possibly related" (lower confidence) rather than
+    # strict same_meaning. No gap filter applied within this tier.
+    EMBEDDING_RELATED_THRESHOLD: float = 0.85
+    # Cap Gemini calls per entity when it has many definitions/usages.
+    EMBEDDING_MAX_SENSES_PER_ENTITY: int = 4
 
     # Rate limiting — free tier resets daily, so by default this only warns
     # (see AI_DAILY_LIMIT_ENFORCE) rather than blocking usage.

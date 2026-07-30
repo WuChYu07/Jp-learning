@@ -33,17 +33,35 @@ def truncate_text(text: str, max_chars: int = _MAX_CHARS) -> str:
     return text[: max_chars - 1].rstrip() + "…"
 
 
-def build_grammar_source_text(
+def _dedupe_preserve_order(parts: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for part in parts:
+        if part not in seen:
+            seen.add(part)
+            unique.append(part)
+    return unique
+
+
+def build_grammar_sense_texts(
     grammar_point: str,
     usages: list[dict] | None = None,
-) -> str:
-    """Compose embedding text focused on Chinese meaning (no JLPT, no 接續規則).
+    *,
+    max_senses: int = 4,
+) -> list[str]:
+    """One embeddable text per usage ("sense"), so a grammar point with
+    several distinct usages isn't reduced to a single averaged/diluted
+    vector — a real match on one usage could otherwise be hidden by
+    unrelated other usages pulling a combined vector away.
 
     Connection rules look alike across many grammar points (Vた＋…), which
     pollutes cosine similarity. Prefer semantic_concept / meaning_zh / blocks.
+    Falls back to a single grammar-point-only text when no usage has any
+    Chinese meaning content yet (e.g. image-only, not yet AI-enriched).
     """
-    meaning_parts: list[str] = []
+    texts: list[str] = []
     for usage in usages or []:
+        meaning_parts: list[str] = []
         for key in ("semantic_concept", "meaning_zh"):
             val = (usage.get(key) or "").strip()
             if val:
@@ -54,50 +72,44 @@ def build_grammar_source_text(
                 if text:
                     meaning_parts.append(text)
 
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique: list[str] = []
-    for part in meaning_parts:
-        if part not in seen:
-            seen.add(part)
-            unique.append(part)
+        unique = _dedupe_preserve_order(meaning_parts)
+        if not unique:
+            continue
+        core = "；".join(unique)
+        parts = [f"日文文法語意：{core}", f"句型：{grammar_point}", core]
+        texts.append(truncate_text("\n".join(parts)))
+        if len(texts) >= max_senses:
+            break
 
-    if unique:
-        # Repeat core meaning to weight semantics over the pattern title
-        core = "；".join(unique[:4])
-        parts = [
-            f"日文文法語意：{core}",
-            f"句型：{grammar_point}",
-            core,
-        ]
-    else:
-        # Fallback when usages lack Chinese — weaker signal
-        parts = [f"日文文法句型：{grammar_point}"]
-    return truncate_text("\n".join(parts))
+    if not texts:
+        # Fallback when no usage has Chinese content — weaker signal
+        texts = [truncate_text(f"日文文法句型：{grammar_point}")]
+    return texts
 
 
-def build_vocab_source_text(
+def build_vocab_sense_texts(
     word: str,
     reading: str | None = None,
     definitions: list[dict] | None = None,
-) -> str:
-    """Compose embedding text focused on Chinese glosses (no JLPT)."""
-    meanings: list[str] = []
+    *,
+    max_senses: int = 4,
+) -> list[str]:
+    """One embeddable text per definition ("sense") — see build_grammar_sense_texts."""
+    head = f"{word}（{reading}）" if reading else word
+
+    texts: list[str] = []
     for definition in definitions or []:
         meaning = (definition.get("meaning_zh") or "").strip()
-        if meaning:
-            meanings.append(meaning)
+        if not meaning:
+            continue
+        parts = [f"日文單字語意：{meaning}", f"詞：{head}", meaning]
+        texts.append(truncate_text("\n".join(parts)))
+        if len(texts) >= max_senses:
+            break
 
-    head = word
-    if reading:
-        head = f"{word}（{reading}）"
-
-    if meanings:
-        gloss = "；".join(meanings[:4])
-        parts = [f"日文單字語意：{gloss}", f"詞：{head}", gloss]
-    else:
-        parts = [f"日文單字：{head}"]
-    return truncate_text("\n".join(parts))
+    if not texts:
+        texts = [truncate_text(f"日文單字：{head}")]
+    return texts
 
 
 class EmbeddingService:

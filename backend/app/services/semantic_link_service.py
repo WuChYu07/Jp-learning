@@ -1,4 +1,13 @@
-"""Auto-create same_meaning links via embedding similarity (JLPT-agnostic)."""
+"""Auto-create same_meaning links via embedding similarity (JLPT-agnostic).
+
+Each entity (grammar point / vocab word) can have multiple "senses"
+(usages / definitions). Rather than blending every sense into one averaged
+embedding — which can hide a real match on one sense behind unrelated other
+senses — each sense gets its own vector, and matching keeps the best
+cross-sense similarity per candidate entity. An exact-text-match pass (free,
+no AI) also catches identical Chinese meanings that a diluted or borderline
+embedding might miss.
+"""
 
 from __future__ import annotations
 
@@ -15,14 +24,17 @@ from app.models.schemas.links import (
     LinkRelationType,
 )
 from app.services.embedding_service import (
-    build_grammar_source_text,
-    build_vocab_source_text,
+    build_grammar_sense_texts,
+    build_vocab_sense_texts,
     content_text_hash,
     embedding_service,
 )
 from app.services.link_service import link_service
 
 logger = logging.getLogger(__name__)
+
+_AUTO_ORIGINS = ("embedding", "text_match")
+_MIN_EXACT_MATCH_LEN = 2
 
 
 class SemanticLinkService:
@@ -48,11 +60,19 @@ class SemanticLinkService:
             .execute()
         ).data or []
 
-        source_text = build_grammar_source_text(row.data["grammar_point"], usages)
+        sense_texts = build_grammar_sense_texts(
+            row.data["grammar_point"],
+            usages,
+            max_senses=settings.EMBEDDING_MAX_SENSES_PER_ENTITY,
+        )
+        raw_meanings = [
+            (u.get("meaning_zh") or "").strip() for u in usages if (u.get("meaning_zh") or "").strip()
+        ]
         return self._sync_entity(
             LinkEntityType.GRAMMAR,
             grammar_id,
-            source_text,
+            sense_texts,
+            raw_meanings,
             force=force,
         )
 
@@ -69,21 +89,28 @@ class SemanticLinkService:
 
         definitions = (
             self.db.table("vocabulary_definitions")
-            .select("meaning_zh, example_sentences")
+            .select("meaning_zh")
             .eq("vocabulary_id", str(vocabulary_id))
             .order("sort_order")
             .execute()
         ).data or []
 
-        source_text = build_vocab_source_text(
+        sense_texts = build_vocab_sense_texts(
             row.data["word"],
             row.data.get("reading"),
             definitions,
+            max_senses=settings.EMBEDDING_MAX_SENSES_PER_ENTITY,
         )
+        raw_meanings = [
+            (d.get("meaning_zh") or "").strip()
+            for d in definitions
+            if (d.get("meaning_zh") or "").strip()
+        ]
         return self._sync_entity(
             LinkEntityType.VOCABULARY,
             vocabulary_id,
-            source_text,
+            sense_texts,
+            raw_meanings,
             force=force,
         )
 
@@ -103,68 +130,113 @@ class SemanticLinkService:
         self,
         entity_type: LinkEntityType,
         entity_id: UUID,
-        source_text: str,
+        sense_texts: list[str],
+        raw_meanings: list[str],
         *,
         force: bool = False,
     ) -> dict:
-        text_hash = content_text_hash(source_text)
-        existing = (
+        existing_rows = (
             self.db.table("content_embeddings")
-            .select("content_hash, embedding")
+            .select("sense_index, content_hash, embedding")
             .eq("entity_type", entity_type.value)
             .eq("entity_id", str(entity_id))
-            .maybe_single()
             .execute()
-        )
-        existing_row = existing.data if existing is not None else None
+        ).data or []
+        existing_by_index = {row["sense_index"]: row for row in existing_rows}
 
-        skipped_embed = False
-        if (
-            not force
-            and existing_row
-            and existing_row.get("content_hash") == text_hash
-            and existing_row.get("embedding")
-        ):
-            vector = self._parse_vector(existing_row["embedding"])
-            skipped_embed = True
-        else:
-            vector = embedding_service.embed_text(source_text)
+        vectors: list[list[float]] = []
+        any_recomputed = False
+        for idx, text in enumerate(sense_texts):
+            text_hash = content_text_hash(text)
+            existing_row = existing_by_index.get(idx)
+            if (
+                not force
+                and existing_row
+                and existing_row.get("content_hash") == text_hash
+                and existing_row.get("embedding")
+            ):
+                vectors.append(self._parse_vector(existing_row["embedding"]))
+                continue
+
+            any_recomputed = True
+            vector = embedding_service.embed_text(text)
+            vectors.append(vector)
             self.db.table("content_embeddings").upsert(
                 {
                     "entity_type": entity_type.value,
                     "entity_id": str(entity_id),
+                    "sense_index": idx,
                     "embedding": vector,
-                    "source_text": source_text,
+                    "source_text": text,
                     "content_hash": text_hash,
                     "model": settings.GEMINI_EMBEDDING_MODEL,
                 },
-                on_conflict="entity_type,entity_id",
+                on_conflict="entity_type,entity_id,sense_index",
             ).execute()
 
-        matches = self._match_neighbors(entity_type, entity_id, vector)
-        threshold = settings.EMBEDDING_SIMILARITY_THRESHOLD
-        gap = settings.EMBEDDING_MAX_SCORE_GAP
-        above = [
-            m
-            for m in matches
-            if float(m.get("similarity") or 0.0) >= threshold
-        ]
-        if above:
-            best = max(float(m.get("similarity") or 0.0) for m in above)
-            above = [
-                m
-                for m in above
-                if best - float(m.get("similarity") or 0.0) <= gap
-            ]
+        # Drop sense rows beyond the current sense count (e.g. definitions removed).
+        for idx in list(existing_by_index.keys()):
+            if idx >= len(sense_texts):
+                self.db.table("content_embeddings").delete().eq(
+                    "entity_type", entity_type.value
+                ).eq("entity_id", str(entity_id)).eq("sense_index", idx).execute()
 
-        kept_ids: set[str] = set()
+        kept: dict[str, dict] = {}
+
+        for target_id in self._find_exact_meaning_matches(entity_type, entity_id, raw_meanings):
+            kept[target_id] = {
+                "confidence": 1.0,
+                "origin": "text_match",
+                "note_zh": "中文意思完全相同",
+            }
+
+        best_by_target: dict[str, float] = {}
+        matches_considered = 0
+        for vector in vectors:
+            for match in self._match_neighbors(entity_type, entity_id, vector):
+                matches_considered += 1
+                target_id = str(match["entity_id"])
+                sim = float(match.get("similarity") or 0.0)
+                if target_id not in best_by_target or sim > best_by_target[target_id]:
+                    best_by_target[target_id] = sim
+
+        strict_threshold = settings.EMBEDDING_SIMILARITY_THRESHOLD
+        related_threshold = settings.EMBEDDING_RELATED_THRESHOLD
+        gap = settings.EMBEDDING_MAX_SCORE_GAP
+
+        strict_matches = {
+            tid: sim for tid, sim in best_by_target.items() if sim >= strict_threshold
+        }
+        if strict_matches:
+            best_strict = max(strict_matches.values())
+            strict_matches = {
+                tid: sim for tid, sim in strict_matches.items() if best_strict - sim <= gap
+            }
+        related_matches = {
+            tid: sim
+            for tid, sim in best_by_target.items()
+            if related_threshold <= sim < strict_threshold
+        }
+
+        for tid, sim in strict_matches.items():
+            kept.setdefault(
+                tid,
+                {"confidence": sim, "origin": "embedding", "note_zh": f"向量相似度 {sim:.2f}"},
+            )
+        for tid, sim in related_matches.items():
+            kept.setdefault(
+                tid,
+                {
+                    "confidence": sim,
+                    "origin": "embedding",
+                    "note_zh": f"向量相似度 {sim:.2f}（可能相關，非嚴格同義）",
+                },
+            )
+
         created = 0
         updated = 0
-
-        for match in above:
-            sim = float(match.get("similarity") or 0.0)
-            target_id = UUID(str(match["entity_id"]))
-            kept_ids.add(str(target_id))
+        for target_id_str, info in kept.items():
+            target_id = UUID(target_id_str)
             payload = ContentLinkCreate(
                 source_type=entity_type,
                 source_id=entity_id,
@@ -172,18 +244,19 @@ class SemanticLinkService:
                 target_id=target_id,
                 relation_type=LinkRelationType.SAME_MEANING,
                 label_zh="語意相近",
-                note_zh=f"向量相似度 {sim:.2f}",
-                confidence=min(1.0, max(0.0, sim)),
-                origin="embedding",
+                note_zh=info["note_zh"],
+                confidence=min(1.0, max(0.0, info["confidence"])),
+                origin=info["origin"],
                 bidirectional=True,
             )
-            existing_link = self._find_embedding_link(entity_type, entity_id, target_id)
+            existing_link = self._find_auto_link(entity_type, entity_id, target_id)
             if existing_link:
                 self.db.table("content_links").update(
                     {
                         "confidence": payload.confidence,
                         "note_zh": payload.note_zh,
                         "label_zh": payload.label_zh,
+                        "origin": payload.origin,
                     }
                 ).eq("id", existing_link["id"]).execute()
                 updated += 1
@@ -191,37 +264,74 @@ class SemanticLinkService:
                 link_service.create_links_batch([payload])
                 created += 1
 
-        removed = self._prune_stale_embedding_links(entity_type, entity_id, kept_ids)
+        removed = self._prune_stale_auto_links(entity_type, entity_id, set(kept.keys()))
 
         return {
             "ok": True,
             "entity_type": entity_type.value,
             "entity_id": str(entity_id),
-            "skipped_embed": skipped_embed,
-            "matches_considered": len(matches),
-            "matches_kept": len(above),
+            "skipped_embed": not any_recomputed,
+            "senses": len(sense_texts),
+            "matches_considered": matches_considered,
+            "matches_kept": len(kept),
             "links_created": created,
             "links_updated": updated,
             "links_removed": removed,
-            "threshold": threshold,
+            "threshold": strict_threshold,
+            "related_threshold": related_threshold,
         }
+
+    def _find_exact_meaning_matches(
+        self,
+        entity_type: LinkEntityType,
+        entity_id: UUID,
+        raw_meanings: list[str],
+    ) -> set[str]:
+        """Free (no AI) same_meaning candidates: other entities of the same
+        type sharing an exact-normalized Chinese meaning with any sense of
+        this entity — catches identical meanings that a diluted or
+        borderline embedding could otherwise miss.
+        """
+        normalized_targets = {
+            m.strip().lower() for m in raw_meanings if len((m or "").strip()) >= _MIN_EXACT_MATCH_LEN
+        }
+        if not normalized_targets:
+            return set()
+
+        table = "grammar_usages" if entity_type == LinkEntityType.GRAMMAR else "vocabulary_definitions"
+        id_column = "grammar_id" if entity_type == LinkEntityType.GRAMMAR else "vocabulary_id"
+
+        try:
+            rows = self.db.table(table).select(f"{id_column}, meaning_zh").execute().data or []
+        except Exception:
+            logger.warning("exact meaning-match lookup failed for %s", table)
+            return set()
+
+        self_id = str(entity_id)
+        matched: set[str] = set()
+        for row in rows:
+            other_id = row.get(id_column)
+            if not other_id or other_id == self_id:
+                continue
+            meaning = (row.get("meaning_zh") or "").strip().lower()
+            if len(meaning) >= _MIN_EXACT_MATCH_LEN and meaning in normalized_targets:
+                matched.add(other_id)
+        return matched
 
     def prune_weak_embedding_links(
         self,
         *,
         min_confidence: float | None = None,
     ) -> dict:
-        """Delete embedding-origin same_meaning links below the confidence floor."""
+        """Delete auto-generated same_meaning links below the confidence floor."""
         floor = (
-            settings.EMBEDDING_SIMILARITY_THRESHOLD
-            if min_confidence is None
-            else min_confidence
+            settings.EMBEDDING_RELATED_THRESHOLD if min_confidence is None else min_confidence
         )
         rows = (
             self.db.table("content_links")
-            .select("id, confidence")
+            .select("id, confidence, origin")
             .eq("relation_type", LinkRelationType.SAME_MEANING.value)
-            .eq("origin", "embedding")
+            .in_("origin", list(_AUTO_ORIGINS))
             .execute()
         ).data or []
 
@@ -246,10 +356,22 @@ class SemanticLinkService:
         entity_types: list[LinkEntityType] | None = None,
         limit: int = 50,
         force: bool = False,
+        scope: str = "recent",
     ) -> dict:
-        """Batch re-sync embeddings/links for recent entities (Map maintenance)."""
+        """Batch re-sync embeddings/links.
+
+        scope="recent" (default): capped at `limit` total, split across
+        entity types, never-embedded entities first (in updated_at desc
+        order) so repeated calls make guaranteed progress instead of
+        re-selecting the same already-processed rows; already-embedded
+        entities fill any remaining budget (catches content changes).
+
+        scope="all_new": ignores `limit` — processes every entity that has
+        never been embedded at all, in one pass. Intended as a deliberate,
+        cost-aware "catch up after a big import" action.
+        """
         types = entity_types or [LinkEntityType.GRAMMAR, LinkEntityType.VOCABULARY]
-        per_type = max(1, limit // max(1, len(types)))
+        per_type = None if scope == "all_new" else max(1, limit // max(1, len(types)))
         results: list[dict] = []
         totals = {
             "entities": 0,
@@ -260,14 +382,9 @@ class SemanticLinkService:
         }
 
         if LinkEntityType.GRAMMAR in types:
-            rows = (
-                self.db.table("grammars")
-                .select("id")
-                .neq("sync_status", "archived")
-                .order("updated_at", desc=True)
-                .limit(per_type)
-                .execute()
-            ).data or []
+            rows = self._select_priority_batch(
+                "grammars", LinkEntityType.GRAMMAR, per_type, filter_archived=True
+            )
             for row in rows:
                 totals["entities"] += 1
                 try:
@@ -284,13 +401,9 @@ class SemanticLinkService:
                     totals["failed"] += 1
 
         if LinkEntityType.VOCABULARY in types:
-            rows = (
-                self.db.table("vocabularies")
-                .select("id")
-                .order("updated_at", desc=True)
-                .limit(per_type)
-                .execute()
-            ).data or []
+            rows = self._select_priority_batch(
+                "vocabularies", LinkEntityType.VOCABULARY, per_type, filter_archived=False
+            )
             for row in rows:
                 totals["entities"] += 1
                 try:
@@ -308,10 +421,56 @@ class SemanticLinkService:
 
         return {
             "ok": True,
+            "scope": scope,
             "threshold": settings.EMBEDDING_SIMILARITY_THRESHOLD,
             "force": force,
             **totals,
         }
+
+    def _select_priority_batch(
+        self,
+        table: str,
+        entity_type: LinkEntityType,
+        cap: int | None,
+        *,
+        filter_archived: bool,
+    ) -> list[dict]:
+        """Rows needing a semantic sync, never-embedded first (in updated_at
+        desc order); already-embedded rows fill any remaining `cap` budget.
+        cap=None returns every never-embedded row, uncapped.
+        """
+        query = self.db.table(table).select("id, updated_at")
+        if filter_archived:
+            query = query.neq("sync_status", "archived")
+        all_rows = query.order("updated_at", desc=True).execute().data or []
+        all_ids = [row["id"] for row in all_rows]
+
+        embedded_ids: set[str] = set()
+        for batch_start in range(0, len(all_ids), 200):
+            batch = all_ids[batch_start : batch_start + 200]
+            try:
+                result = (
+                    self.db.table("content_embeddings")
+                    .select("entity_id")
+                    .eq("entity_type", entity_type.value)
+                    .in_("entity_id", batch)
+                    .execute()
+                )
+            except Exception:
+                logger.warning("content_embeddings lookup failed while selecting batch")
+                continue
+            embedded_ids.update(row["entity_id"] for row in (result.data or []))
+
+        never_embedded = [row for row in all_rows if row["id"] not in embedded_ids]
+        if cap is None:
+            return never_embedded
+
+        prioritized = never_embedded[:cap]
+        remaining = cap - len(prioritized)
+        if remaining > 0:
+            already_embedded = [row for row in all_rows if row["id"] in embedded_ids]
+            prioritized += already_embedded[:remaining]
+        return prioritized
 
     def _match_neighbors(
         self,
@@ -340,35 +499,37 @@ class SemanticLinkService:
         entity_id: UUID,
         vector: list[float],
     ) -> list[dict]:
-        """Python cosine fallback if RPC unavailable (slower, for small corpora)."""
+        """Python cosine fallback if RPC unavailable (slower, for small corpora).
+
+        Dedupes to the best-scoring row per entity_id, matching the RPC's
+        behavior now that an entity can have multiple sense rows.
+        """
         rows = (
             self.db.table("content_embeddings")
             .select("entity_id, embedding")
             .eq("entity_type", entity_type.value)
             .neq("entity_id", str(entity_id))
-            .limit(500)
+            .limit(2000)
             .execute()
         ).data or []
 
-        scored: list[tuple[float, str]] = []
+        best_by_entity: dict[str, float] = {}
         for row in rows:
             other = self._parse_vector(row.get("embedding"))
             if not other:
                 continue
             sim = self._cosine(vector, other)
-            scored.append((sim, row["entity_id"]))
-        scored.sort(key=lambda x: -x[0])
-        top = scored[: settings.EMBEDDING_MATCH_TOP_K]
+            eid = row["entity_id"]
+            if eid not in best_by_entity or sim > best_by_entity[eid]:
+                best_by_entity[eid] = sim
+
+        top = sorted(best_by_entity.items(), key=lambda x: -x[1])[: settings.EMBEDDING_MATCH_TOP_K]
         return [
-            {
-                "entity_type": entity_type.value,
-                "entity_id": eid,
-                "similarity": sim,
-            }
-            for sim, eid in top
+            {"entity_type": entity_type.value, "entity_id": eid, "similarity": sim}
+            for eid, sim in top
         ]
 
-    def _find_embedding_link(
+    def _find_auto_link(
         self,
         entity_type: LinkEntityType,
         source_id: UUID,
@@ -385,7 +546,7 @@ class SemanticLinkService:
                 .eq("target_type", et)
                 .eq("target_id", tgt)
                 .eq("relation_type", LinkRelationType.SAME_MEANING.value)
-                .eq("origin", "embedding")
+                .in_("origin", list(_AUTO_ORIGINS))
                 .maybe_single()
                 .execute()
             )
@@ -393,7 +554,7 @@ class SemanticLinkService:
                 return result.data
         return None
 
-    def _prune_stale_embedding_links(
+    def _prune_stale_auto_links(
         self,
         entity_type: LinkEntityType,
         entity_id: UUID,
@@ -407,7 +568,7 @@ class SemanticLinkService:
             .eq("source_type", et)
             .eq("source_id", eid)
             .eq("relation_type", LinkRelationType.SAME_MEANING.value)
-            .eq("origin", "embedding")
+            .in_("origin", list(_AUTO_ORIGINS))
             .execute()
         ).data or []
         as_target = (
@@ -416,7 +577,7 @@ class SemanticLinkService:
             .eq("target_type", et)
             .eq("target_id", eid)
             .eq("relation_type", LinkRelationType.SAME_MEANING.value)
-            .eq("origin", "embedding")
+            .in_("origin", list(_AUTO_ORIGINS))
             .execute()
         ).data or []
 

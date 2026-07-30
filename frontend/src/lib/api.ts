@@ -852,21 +852,29 @@ export const api = {
     entity_types?: string;
     limit?: number;
     force?: boolean;
+    scope?: "recent" | "all_new";
   }) => {
     const q = new URLSearchParams();
     if (params?.entity_types) q.set("entity_types", params.entity_types);
     if (params?.limit) q.set("limit", String(params.limit));
     if (params?.force) q.set("force", "true");
+    if (params?.scope) q.set("scope", params.scope);
     const qs = q.toString();
     return request<{
       ok: boolean;
+      scope: string;
       threshold: number;
       entities: number;
       links_created: number;
       links_updated: number;
       links_removed: number;
       failed: number;
-    }>(`/api/v1/graph/recompute-semantic${qs ? `?${qs}` : ""}`, { method: "POST" });
+    }>(
+      `/api/v1/graph/recompute-semantic${qs ? `?${qs}` : ""}`,
+      { method: "POST" },
+      // "all_new" can process many entities in one call — give it real headroom.
+      params?.scope === "all_new" ? { timeoutMs: 10 * 60_000, maxAttempts: 1 } : undefined,
+    );
   },
   suggestGrammarLinks: (id: string) =>
     request<SuggestLinksResponse>(`/api/v1/grammar/${id}/suggest-links`, {
