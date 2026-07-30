@@ -126,7 +126,7 @@ class NotionSyncService:
                                 notion_block_id=f["notion_block_id"],
                                 heading_text=f["heading_text"],
                             )
-                            for f in classification.failed
+                            for f in classification.pending
                         )
 
                     analysis = analyze_blocks(blocks)

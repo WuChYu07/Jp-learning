@@ -488,7 +488,10 @@ function NotionSync() {
           {preview.unclassified_headings.length > 0 && (
             <div className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
               <p className="font-semibold">
-                ⚠️ 以下 {preview.unclassified_headings.length} 個標題 AI 分類失敗，本次暫不拆分（下次同步會自動重試）：
+                ⚠️ 以下 {preview.unclassified_headings.length} 個標題本次還沒判斷完（分類失敗，或新標題太多一次處理不完），暫時維持原樣、不拆分。
+              </p>
+              <p className="mt-1 font-semibold text-amber-950">
+                請再跑一次「同步預覽」繼續處理剩下的標題。
               </p>
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 {preview.unclassified_headings.map((h) => (

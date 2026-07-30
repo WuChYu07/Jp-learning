@@ -23,6 +23,13 @@ from app.services.notion.parser import HeadingCandidate
 
 logger = logging.getLogger(__name__)
 
+# Cap how many *new* (uncached) headings get classified in a single sync, so
+# a page with a large batch of never-before-seen headings can't blow the
+# output budget in one call. Anything beyond the cap is left uncached and
+# picked up automatically on the next sync (already-classified headings are
+# unaffected — they're served straight from the cache regardless of this cap).
+MAX_HEADINGS_PER_SYNC = 20
+
 _PROMPT = """You are organizing a Traditional-Chinese speaker's Japanese grammar notes from Notion.
 For each heading below, decide whether it is:
 - "category": just a JLPT-level or topic LABEL. Every item listed under it is an INDEPENDENT grammar point that deserves its own separate entry (e.g. a heading "N2文法" listing several unrelated grammar patterns).
@@ -39,9 +46,11 @@ Return ONLY valid JSON mapping each id to "category" or "topic", nothing else:
 @dataclass
 class HeadingClassificationResult:
     category_block_ids: set[str] = field(default_factory=set)
-    # Headings that couldn't be classified this run (AI unavailable / bad
-    # response) — surfaced to the user rather than silently guessed.
-    failed: list[dict] = field(default_factory=list)
+    # Headings not classified this run — either the AI call/response failed,
+    # or they were deferred past MAX_HEADINGS_PER_SYNC. Either way they stay
+    # uncached and get picked up on the next sync; surfaced to the user
+    # rather than silently guessed, with a prompt to run sync again.
+    pending: list[dict] = field(default_factory=list)
 
 
 def classify_headings(
@@ -79,11 +88,23 @@ def classify_headings(
     if not uncached:
         return HeadingClassificationResult(category_block_ids=cached_category)
 
-    decisions, failed_ids = _classify_via_gemini(uncached)
+    to_classify = uncached[:MAX_HEADINGS_PER_SYNC]
+    deferred = uncached[MAX_HEADINGS_PER_SYNC:]
+    if deferred:
+        logger.info(
+            "deferring %d/%d new headings past this sync's cap of %d; they'll be "
+            "classified on a future sync",
+            len(deferred),
+            len(uncached),
+            MAX_HEADINGS_PER_SYNC,
+        )
+
+    decisions, failed_ids = _classify_via_gemini(to_classify)
+    pending_ids = failed_ids + [c.block_id for c in deferred]
 
     new_category: set[str] = set()
     rows_to_upsert = []
-    for candidate in uncached:
+    for candidate in to_classify:
         decision = decisions.get(candidate.block_id)
         if decision is None:
             continue
@@ -109,13 +130,13 @@ def classify_headings(
                 "be re-classified next sync"
             )
 
-    failed = [
+    pending = [
         {"notion_block_id": by_id[bid].block_id, "heading_text": by_id[bid].heading_text}
-        for bid in failed_ids
+        for bid in pending_ids
     ]
 
     return HeadingClassificationResult(
-        category_block_ids=cached_category | new_category, failed=failed
+        category_block_ids=cached_category | new_category, pending=pending
     )
 
 
