@@ -5,7 +5,7 @@ import {
   LinkRelationType,
   RelationGraph,
 } from "../lib/api";
-import { RELATION_COLORS, RELATION_LABELS } from "./RelationLinkList";
+import { RELATION_COLORS, RELATION_LABELS, isLooseSameMeaning } from "./RelationLinkList";
 
 type SimNode = GraphNode & {
   x: number;
@@ -193,7 +193,8 @@ export default function RelationGraphPanel({
         const b = byId.get(edge.target);
         if (!a || !b) continue;
         const color = RELATION_COLORS[edge.relation_type as LinkRelationType] || "#a8a29e";
-        const lowConf = (edge.confidence ?? 1) < 0.7;
+        const loose = isLooseSameMeaning(edge);
+        const lowConf = loose || (edge.confidence ?? 1) < 0.7;
         const conf = Math.max(0.35, Math.min(1, edge.confidence ?? 1));
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -209,7 +210,7 @@ export default function RelationGraphPanel({
 
         const mx = (a.x + b.x) / 2;
         const my = (a.y + b.y) / 2;
-        const label = edge.label_zh || RELATION_LABELS[edge.relation_type];
+        const label = loose ? "可能相關" : edge.label_zh || RELATION_LABELS[edge.relation_type];
         if (label) {
           ctx.font = "10px sans-serif";
           ctx.fillStyle = "#78716c";

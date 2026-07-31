@@ -47,7 +47,10 @@ class Settings(BaseSettings):
     EMBEDDING_MAX_SCORE_GAP: float = 0.015
     # Looser tier: shown as "possibly related" (lower confidence) rather than
     # strict same_meaning. No gap filter applied within this tier.
-    EMBEDDING_RELATED_THRESHOLD: float = 0.85
+    # Raised from 0.85 — the low 0.85s tended to surface topically-adjacent
+    # but not actually related matches (shared wording like "ongoing/持續"
+    # without being the same grammar concept).
+    EMBEDDING_RELATED_THRESHOLD: float = 0.87
     # Cap Gemini calls per entity when it has many definitions/usages.
     EMBEDDING_MAX_SENSES_PER_ENTITY: int = 4
 
