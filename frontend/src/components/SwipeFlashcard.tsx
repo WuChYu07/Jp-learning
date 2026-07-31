@@ -124,6 +124,7 @@ export default function SwipeFlashcard({
 
   return (
     <div className="swipe-card-stage relative mx-auto w-full max-w-xl select-none">
+      <div className="relative">
       <div
         aria-hidden
         className="swipe-card-shadow absolute inset-x-4 top-3 h-full rounded-3xl bg-orange-100/60"
@@ -191,6 +192,7 @@ export default function SwipeFlashcard({
         )}
 
         <div className="swipe-card-body relative z-10 w-full">{!flipped ? front : back}</div>
+      </div>
       </div>
 
       {!exiting && (
