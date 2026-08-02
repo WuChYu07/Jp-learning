@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
-import VocabRelationHints from "../components/VocabRelationHints";
+import RelationHints from "../components/RelationHints";
 import { api, Vocabulary } from "../lib/api";
 import { vocabDisplay } from "../lib/vocabDisplay";
 
@@ -299,7 +299,9 @@ export default function VocabReviewPage() {
         }
       />
 
-      {flipped && current && <VocabRelationHints vocabularyId={current.id} />}
+      {flipped && current && (
+        <RelationHints entityId={current.id} entityType="vocabulary" center />
+      )}
     </div>
   );
 }

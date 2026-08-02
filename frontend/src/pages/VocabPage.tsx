@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import SpeakButton from "../components/SpeakButton";
 import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
-import VocabRelationHints from "../components/VocabRelationHints";
+import RelationHints from "../components/RelationHints";
 import { api, Vocabulary, VocabularySummary, VocabularyWriteInput, formatUserFacingError } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
 import { vocabDisplay } from "../lib/vocabDisplay";
@@ -493,7 +493,7 @@ function VocabDetail({
         </div>
       ))}
 
-      <VocabRelationHints vocabularyId={vocab.id} />
+      <RelationHints entityId={vocab.id} entityType="vocabulary" />
 
       {modal && (
         <VocabEditModal

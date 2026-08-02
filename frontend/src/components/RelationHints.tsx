@@ -5,7 +5,10 @@ import { vocabDisplay } from "../lib/vocabDisplay";
 import { RELATION_COLORS, RELATION_LABELS, isLooseSameMeaning } from "./RelationLinkList";
 
 type Props = {
-  vocabularyId: string;
+  entityId: string;
+  entityType: "vocabulary" | "grammar";
+  /** Center the box under a fixed-width flashcard instead of the default left-aligned flow. */
+  center?: boolean;
 };
 
 /** Parse backend graph label `word` or `word（reading）` into display parts. */
@@ -17,22 +20,25 @@ function formatVocabNodeLabel(label: string, jlpt?: string): string {
   return jlpt ? `${primary} · ${jlpt}` : primary;
 }
 
-export default function VocabRelationHints({ vocabularyId }: Props) {
+export default function RelationHints({ entityId, entityType, center = false }: Props) {
   const navigate = useNavigate();
   const [graph, setGraph] = useState<RelationGraph | null>(null);
   const [syncing, setSyncing] = useState(false);
 
+  const fetchRelations = () =>
+    entityType === "vocabulary"
+      ? api.getVocabRelations(entityId, 1)
+      : api.getGrammarRelations(entityId, 1);
+
   const load = () => {
-    api
-      .getVocabRelations(vocabularyId, 1)
+    fetchRelations()
       .then((data) => setGraph(data))
       .catch(() => setGraph(null));
   };
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getVocabRelations(vocabularyId, 1)
+    fetchRelations()
       .then((data) => {
         if (!cancelled) setGraph(data);
       })
@@ -42,7 +48,8 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [vocabularyId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityId, entityType]);
 
   const relatedGrammars: Array<{ node: GraphNode; label: string; color: string; loose: boolean }> = [];
   const relatedVocab: Array<{ node: GraphNode; label: string; color: string; loose: boolean }> = [];
@@ -50,6 +57,11 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
   if (graph) {
     const center = graph.center_id;
     const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+    // A neighbor can be reached via more than one edge (e.g. multi-sense
+    // embeddings creating several same_meaning edges for the same pair), so
+    // dedupe by node id — keep the strict (non-loose) match when both exist.
+    const grammarMap = new Map<string, { node: GraphNode; label: string; color: string; loose: boolean }>();
+    const vocabMap = new Map<string, { node: GraphNode; label: string; color: string; loose: boolean }>();
     for (const edge of graph.edges) {
       const otherId = edge.source === center ? edge.target : edge.source;
       const node = nodeMap.get(otherId);
@@ -61,15 +73,25 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
         color: RELATION_COLORS[edge.relation_type],
         loose,
       };
-      if (node.type === "grammar") relatedGrammars.push(item);
-      if (node.type === "vocabulary") relatedVocab.push(item);
+      const map = node.type === "grammar" ? grammarMap : node.type === "vocabulary" ? vocabMap : null;
+      if (!map) continue;
+      const existing = map.get(node.id);
+      if (!existing || (existing.loose && !loose)) {
+        map.set(node.id, item);
+      }
     }
+    relatedGrammars.push(...grammarMap.values());
+    relatedVocab.push(...vocabMap.values());
   }
 
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await api.syncVocabSemanticLinks(vocabularyId);
+      if (entityType === "vocabulary") {
+        await api.syncVocabSemanticLinks(entityId);
+      } else {
+        await api.syncGrammarSemanticLinks(entityId);
+      }
       load();
     } finally {
       setSyncing(false);
@@ -82,10 +104,18 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
     });
   };
 
+  const goGrammar = (node: GraphNode) => {
+    navigate("/grammar", {
+      state: { grammarId: node.id.replace(/^grammar:/, "") },
+    });
+  };
+
   if (!graph) return null;
   if (relatedGrammars.length === 0 && relatedVocab.length === 0) {
     return (
-      <div className="mt-4 w-full max-w-md rounded-xl bg-sky-50/80 px-4 py-3 text-left ring-1 ring-sky-100">
+      <div
+        className={`mt-4 w-full max-w-md rounded-xl bg-sky-50/80 px-4 py-3 text-left ring-1 ring-sky-100 ${center ? "mx-auto" : ""}`}
+      >
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-sky-900">尚無語意近義單字／文法連結</p>
           <button
@@ -102,7 +132,9 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
   }
 
   return (
-    <div className="mt-4 w-full max-w-md space-y-3 rounded-xl bg-sky-50/80 px-4 py-3 text-left ring-1 ring-sky-100">
+    <div
+      className={`mt-4 w-full max-w-md space-y-3 rounded-xl bg-sky-50/80 px-4 py-3 text-left ring-1 ring-sky-100 ${center ? "mx-auto" : ""}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-sky-900">語意關聯（跨 JLPT）</p>
         <button
@@ -146,11 +178,7 @@ export default function VocabRelationHints({ vocabularyId }: Props) {
               <li key={node.id}>
                 <button
                   type="button"
-                  onClick={() =>
-                    navigate("/grammar", {
-                      state: { grammarId: node.id.replace(/^grammar:/, "") },
-                    })
-                  }
+                  onClick={() => goGrammar(node)}
                   title={loose ? "可能相關（非嚴格同義）" : undefined}
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-stone-700 ring-1 ring-sky-100 transition hover:bg-sky-100"
                 >

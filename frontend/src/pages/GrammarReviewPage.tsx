@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import RelationHints from "../components/RelationHints";
 import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import { api, Grammar } from "../lib/api";
@@ -275,6 +276,10 @@ export default function GrammarReviewPage() {
           </>
         }
       />
+
+      {flipped && current && (
+        <RelationHints entityId={current.id} entityType="grammar" center />
+      )}
     </div>
   );
 }
