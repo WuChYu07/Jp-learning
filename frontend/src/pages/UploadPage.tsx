@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   IngestionResponse,
   JlptSuggestion,
+  NotionScheduledCheck,
   NotionSyncPreview,
   SyncReport,
   TextParsePreview,
@@ -17,9 +18,18 @@ export default function UploadPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold">
-        匯入學習資料
-      </h1>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold">
+          匯入學習資料
+        </h1>
+        <a
+          href={api.exportBackupUrl()}
+          className="shrink-0 rounded-full bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-200"
+          title="下載所有單字、文法、複習紀錄與語意關聯的 JSON 備份"
+        >
+          備份資料 ↓
+        </a>
+      </div>
 
       {/* Tab bar */}
       <div className="flex flex-wrap rounded-2xl bg-stone-100 p-1">
@@ -265,6 +275,13 @@ function JlptBatchFill() {
 // Notion Sync (preview → confirm)
 // ═══════════════════════════════════════════════════════════════════════════
 
+function formatCheckTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes(),
+  ).padStart(2, "0")}`;
+}
+
 function NotionSync() {
   const [focus, setFocus] = useState<FocusType>("both");
   const [pageId, setPageId] = useState("");
@@ -282,6 +299,14 @@ function NotionSync() {
   const [forceRefresh, setForceRefresh] = useState(false);
   const [result, setResult] = useState<IngestionResponse | null>(null);
   const [error, setError] = useState("");
+  const [scheduledCheck, setScheduledCheck] = useState<NotionScheduledCheck | null>(null);
+
+  useEffect(() => {
+    api
+      .notionStatus()
+      .then((s) => setScheduledCheck(s.scheduled_check ?? null))
+      .catch(() => setScheduledCheck(null));
+  }, []);
 
   async function handleSync() {
     if (syncing) return;
@@ -405,6 +430,41 @@ function NotionSync() {
       <p className="text-sm text-stone-600">
         從 Notion 筆記同步。在 backend/.env 分別設定 NOTION_VOCAB_PAGE_ID 與 NOTION_GRAMMAR_PAGE_ID。
       </p>
+
+      {!preview && !result && scheduledCheck && (
+        <div
+          className={`rounded-xl p-3 text-xs ring-1 ${
+            scheduledCheck.error
+              ? "bg-red-50 text-red-800 ring-red-200"
+              : scheduledCheck.has_changes
+                ? "bg-amber-50 text-amber-900 ring-amber-200"
+                : "bg-stone-50 text-stone-500 ring-stone-200"
+          }`}
+        >
+          {scheduledCheck.error ? (
+            <>自動排程檢查失敗：{scheduledCheck.error}</>
+          ) : scheduledCheck.has_changes ? (
+            <>
+              自動排程於 {formatCheckTime(scheduledCheck.checked_at)} 發現待確認的變更：
+              {[
+                scheduledCheck.grammar_new_count > 0 && `文法新增 ${scheduledCheck.grammar_new_count}`,
+                scheduledCheck.grammar_updated_count > 0 && `文法更新 ${scheduledCheck.grammar_updated_count}`,
+                scheduledCheck.vocab_new_count > 0 && `單字新增 ${scheduledCheck.vocab_new_count}`,
+                scheduledCheck.vocab_updated_count > 0 && `單字更新 ${scheduledCheck.vocab_updated_count}`,
+                scheduledCheck.orphaned_grammar_count > 0 && `文法孤兒 ${scheduledCheck.orphaned_grammar_count}`,
+                scheduledCheck.orphaned_vocab_count > 0 && `單字孤兒 ${scheduledCheck.orphaned_vocab_count}`,
+                scheduledCheck.unclassified_count > 0 && `未分類標題 ${scheduledCheck.unclassified_count}`,
+              ]
+                .filter(Boolean)
+                .join("、")}
+              ，請按下方「開始同步」查看並確認。
+            </>
+          ) : (
+            <>自動排程於 {formatCheckTime(scheduledCheck.checked_at)} 檢查過，沒有發現變更。</>
+          )}
+        </div>
+      )}
+
       <div className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
         不消耗 AI Token · 流程：同步預覽 → 勾選新增／更新 → 確認匯入
         <br />

@@ -417,6 +417,19 @@ export type NotionSyncPreview = {
   sources: NotionPageSource[];
 };
 
+export type NotionScheduledCheck = {
+  checked_at: string;
+  has_changes: boolean;
+  grammar_new_count: number;
+  grammar_updated_count: number;
+  vocab_new_count: number;
+  vocab_updated_count: number;
+  orphaned_grammar_count: number;
+  orphaned_vocab_count: number;
+  unclassified_count: number;
+  error: string | null;
+};
+
 export type NotionSyncStatus = {
   synced: boolean;
   last_synced_at?: string;
@@ -429,6 +442,7 @@ export type NotionSyncStatus = {
     vocabulary_count?: number;
     image_count?: number;
   }>;
+  scheduled_check?: NotionScheduledCheck | null;
 };
 
 export type DashboardStats = {
@@ -445,6 +459,24 @@ export type DashboardStats = {
   exam_grammar_avg: number | null;
   exam_vocab_count: number;
   exam_grammar_count: number;
+};
+
+export type DailyReviewCount = {
+  date: string;
+  count: number;
+};
+
+export type JlptMastery = {
+  jlpt_level: string;
+  total: number;
+  reviewed: number;
+  avg_score: number;
+};
+
+export type DashboardTrends = {
+  daily_counts: DailyReviewCount[];
+  vocab_jlpt: JlptMastery[];
+  grammar_jlpt: JlptMastery[];
 };
 
 export type GrammarReviewBatchResponse = {
@@ -563,6 +595,8 @@ async function request<T>(
 
 export const api = {
   dashboardStats: () => request<DashboardStats>("/api/v1/dashboard/stats"),
+  dashboardTrends: (days = 14) =>
+    request<DashboardTrends>(`/api/v1/dashboard/trends?days=${days}`),
   listVocab: (params?: { jlpt?: string; q?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.jlpt) q.set("jlpt", params.jlpt);
@@ -970,4 +1004,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // ── Backup ──
+  /** URL for the full-data JSON backup; browser handles the download natively
+   * (Content-Disposition: attachment), so a multi-MB payload never needs to
+   * pass through a JS fetch/blob round trip. */
+  exportBackupUrl: () => `${API_BASE}/api/v1/export`,
 };

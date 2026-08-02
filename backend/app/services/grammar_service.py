@@ -470,6 +470,7 @@ class GrammarService:
         from app.services.review_activity_service import review_activity_service
 
         streak_days = review_activity_service.record_review(user_id)
+        review_activity_service.log_review_event(user_id, "grammar", grammar_id, rating)
         return {
             "grammar_id": str(grammar_id),
             "rating": rating,

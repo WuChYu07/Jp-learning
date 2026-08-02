@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.api.deps import get_effective_user_id
 from app.core.config import settings
@@ -66,3 +66,14 @@ def confirm_notion_sync(
 def notion_sync_status() -> dict:
     """Return latest Notion sync metadata."""
     return notion_sync_service.get_status()
+
+
+@router.post("/scheduled-check")
+def scheduled_notion_check(
+    x_scheduled_sync_token: Annotated[str | None, Header()] = None,
+) -> dict:
+    """Preview-only check for unattended callers (e.g. a GitHub Actions cron).
+    Never writes content; a human still confirms via the Upload page."""
+    if not settings.SCHEDULED_SYNC_TOKEN or x_scheduled_sync_token != settings.SCHEDULED_SYNC_TOKEN:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid sync token")
+    return notion_sync_service.run_scheduled_check()

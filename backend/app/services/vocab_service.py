@@ -460,6 +460,7 @@ class VocabService:
         from app.services.review_activity_service import review_activity_service
 
         streak_days = review_activity_service.record_review(user_id)
+        review_activity_service.log_review_event(user_id, "vocab", vocabulary_id, rating)
 
         return {
             "vocabulary_id": str(vocabulary_id),

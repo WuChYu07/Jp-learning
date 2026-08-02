@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, DashboardStats, formatUserFacingError } from "../lib/api";
+import {
+  api,
+  DailyReviewCount,
+  DashboardStats,
+  DashboardTrends,
+  JlptMastery,
+  formatUserFacingError,
+} from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [trends, setTrends] = useState<DashboardTrends | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const loadHint = useSlowLoadHint(loading);
@@ -16,6 +24,10 @@ export default function DashboardPage() {
       .then(setStats)
       .catch((err: unknown) => setError(formatUserFacingError(err)))
       .finally(() => setLoading(false));
+    api
+      .dashboardTrends(14)
+      .then(setTrends)
+      .catch(() => setTrends(null));
   }, []);
 
   return (
@@ -160,6 +172,31 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* Trends */}
+      {trends && trends.daily_counts.some((d) => d.count > 0) && (
+        <section className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
+          <p className="text-sm font-medium text-stone-700">近 14 天複習量</p>
+          <DailyReviewChart data={trends.daily_counts} />
+        </section>
+      )}
+
+      {trends && (trends.vocab_jlpt.length > 0 || trends.grammar_jlpt.length > 0) && (
+        <section className="grid gap-4 md:grid-cols-2">
+          {trends.vocab_jlpt.length > 0 && (
+            <div className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
+              <p className="text-sm font-medium text-stone-700">單字熟練度（依 JLPT 級別）</p>
+              <JlptBreakdownList items={trends.vocab_jlpt} accent="bg-[var(--color-primary)]" />
+            </div>
+          )}
+          {trends.grammar_jlpt.length > 0 && (
+            <div className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
+              <p className="text-sm font-medium text-stone-700">文法熟練度（依 JLPT 級別）</p>
+              <JlptBreakdownList items={trends.grammar_jlpt} accent="bg-violet-500" />
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Action cards */}
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <ActionCard
@@ -220,6 +257,55 @@ export default function DashboardPage() {
         />
       </section>
     </div>
+  );
+}
+
+function DailyReviewChart({ data }: { data: DailyReviewCount[] }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  return (
+    <div className="mt-4 flex h-28 items-end gap-1.5">
+      {data.map((d) => {
+        const day = new Date(`${d.date}T00:00:00Z`);
+        const label = `${day.getUTCMonth() + 1}/${day.getUTCDate()}`;
+        return (
+          <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+            <div className="flex h-20 w-full items-end">
+              <div
+                className={`w-full rounded-t-md transition-all ${
+                  d.count > 0 ? "bg-[var(--color-primary)]" : "bg-stone-100"
+                }`}
+                style={{ height: `${Math.max(4, (d.count / max) * 100)}%` }}
+                title={`${d.date}：${d.count} 次`}
+              />
+            </div>
+            <p className="text-[10px] text-stone-400">{label}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function JlptBreakdownList({ items, accent }: { items: JlptMastery[]; accent: string }) {
+  return (
+    <ul className="mt-4 space-y-2.5">
+      {items.map((item) => (
+        <li key={item.jlpt_level}>
+          <div className="flex items-center justify-between text-xs text-stone-500">
+            <span className="font-semibold text-stone-700">{item.jlpt_level}</span>
+            <span>
+              {Math.round(item.avg_score)} 分 · 已學 {item.reviewed}/{item.total}
+            </span>
+          </div>
+          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-stone-100">
+            <div
+              className={`h-full rounded-full ${accent} transition-all`}
+              style={{ width: `${Math.min(100, item.avg_score)}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

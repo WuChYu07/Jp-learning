@@ -370,28 +370,101 @@ class NotionSyncService:
             .execute()
         )
         rows = result.data or []
-        if not rows:
-            return {"synced": False, "pages": []}
 
-        by_page: dict[str, dict] = {}
-        for row in rows:
-            pid = row.get("page_id")
-            if pid and pid not in by_page:
-                by_page[pid] = {
-                    "page_id": pid,
-                    "page_title": row.get("page_title"),
-                    "focus": row.get("focus"),
-                    "last_synced_at": row.get("synced_at"),
-                    "grammar_count": row.get("grammar_count", 0),
-                    "vocabulary_count": row.get("vocab_count", 0),
-                    "image_count": row.get("image_count", 0),
-                }
+        status: dict = {"synced": False, "pages": []}
+        if rows:
+            by_page: dict[str, dict] = {}
+            for row in rows:
+                pid = row.get("page_id")
+                if pid and pid not in by_page:
+                    by_page[pid] = {
+                        "page_id": pid,
+                        "page_title": row.get("page_title"),
+                        "focus": row.get("focus"),
+                        "last_synced_at": row.get("synced_at"),
+                        "grammar_count": row.get("grammar_count", 0),
+                        "vocabulary_count": row.get("vocab_count", 0),
+                        "image_count": row.get("image_count", 0),
+                    }
+            status = {
+                "synced": True,
+                "pages": list(by_page.values()),
+                "last_synced_at": rows[0].get("synced_at"),
+            }
 
-        return {
-            "synced": True,
-            "pages": list(by_page.values()),
-            "last_synced_at": rows[0].get("synced_at"),
+        status["scheduled_check"] = self._latest_scheduled_check()
+        return status
+
+    def _latest_scheduled_check(self) -> dict | None:
+        try:
+            result = (
+                self.db.table("notion_scheduled_checks")
+                .select("*")
+                .order("checked_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception:
+            # migration 024 may not be applied yet.
+            return None
+        rows = result.data or []
+        return rows[0] if rows else None
+
+    def run_scheduled_check(self) -> dict:
+        """Preview-only check for unattended callers (e.g. GitHub Actions cron).
+        Never writes content — a human still confirms via the Upload page."""
+        try:
+            preview = self.sync_preview(focus="both", upload_images=False)
+        except Exception as exc:
+            logger.exception("scheduled Notion check failed")
+            self._record_scheduled_check(error=str(exc))
+            return {"ok": False, "error": str(exc)}
+
+        counts = {
+            "grammar_new_count": preview.grammar_new_count,
+            "grammar_updated_count": preview.grammar_updated_count,
+            "vocab_new_count": preview.vocab_new_count,
+            "vocab_updated_count": preview.vocab_updated_count,
+            "orphaned_grammar_count": len(preview.orphaned_grammars),
+            "orphaned_vocab_count": len(preview.orphaned_vocabularies),
+            "unclassified_count": len(preview.unclassified_headings),
         }
+        has_changes = any(counts.values())
+        self._record_scheduled_check(has_changes=has_changes, **counts)
+        return {"ok": True, "has_changes": has_changes, **counts}
+
+    def _record_scheduled_check(
+        self,
+        *,
+        has_changes: bool = False,
+        error: str | None = None,
+        grammar_new_count: int = 0,
+        grammar_updated_count: int = 0,
+        vocab_new_count: int = 0,
+        vocab_updated_count: int = 0,
+        orphaned_grammar_count: int = 0,
+        orphaned_vocab_count: int = 0,
+        unclassified_count: int = 0,
+    ) -> None:
+        try:
+            self.db.table("notion_scheduled_checks").insert(
+                {
+                    "has_changes": has_changes,
+                    "error": error,
+                    "grammar_new_count": grammar_new_count,
+                    "grammar_updated_count": grammar_updated_count,
+                    "vocab_new_count": vocab_new_count,
+                    "vocab_updated_count": vocab_updated_count,
+                    "orphaned_grammar_count": orphaned_grammar_count,
+                    "orphaned_vocab_count": orphaned_vocab_count,
+                    "unclassified_count": unclassified_count,
+                }
+            ).execute()
+        except Exception:
+            logger.warning(
+                "notion_scheduled_checks insert failed (migration 024 may not be applied yet)",
+                exc_info=True,
+            )
 
     def _persist_images(self, client: NotionClient, blocks) -> None:
         candidates = [

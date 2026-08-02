@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     NOTION_GRAMMAR_PAGE_ID: str = ""
     NOTION_AUTO_APPROVE: bool = False
     NOTION_STORAGE_BUCKET: str = "notion-images"
+    # Shared secret for POST /notion/scheduled-check (e.g. GitHub Actions cron).
+    # Endpoint refuses all requests while empty — never leave it open on a public deploy.
+    SCHEDULED_SYNC_TOKEN: str = ""
 
     @field_validator("SUPABASE_URL")
     @classmethod

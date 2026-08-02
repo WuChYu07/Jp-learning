@@ -8,6 +8,27 @@ from pydantic import BaseModel
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
+from app.services.review_activity_service import review_activity_service
+
+_JLPT_ORDER = ["N5", "N4", "N3", "N2", "N1", "unknown"]
+
+
+class DailyReviewCount(BaseModel):
+    date: str
+    count: int
+
+
+class JlptMastery(BaseModel):
+    jlpt_level: str
+    total: int
+    reviewed: int
+    avg_score: float
+
+
+class DashboardTrends(BaseModel):
+    daily_counts: list[DailyReviewCount]
+    vocab_jlpt: list[JlptMastery]
+    grammar_jlpt: list[JlptMastery]
 
 
 class DashboardStats(BaseModel):
@@ -142,6 +163,52 @@ class DashboardService:
             exam_vocab_count=exam_vocab_count,
             exam_grammar_count=exam_grammar_count,
         )
+
+    def get_trends(self, user_id: str | None, days: int = 14) -> DashboardTrends:
+        if not user_id:
+            return DashboardTrends(daily_counts=[], vocab_jlpt=[], grammar_jlpt=[])
+        daily = review_activity_service.daily_counts(user_id, days)
+        return DashboardTrends(
+            daily_counts=[DailyReviewCount(**d) for d in daily],
+            vocab_jlpt=self._jlpt_breakdown("vocabularies", "user_vocab_progress", "vocabulary_id", user_id),
+            grammar_jlpt=self._jlpt_breakdown("grammars", "user_grammar_progress", "grammar_id", user_id),
+        )
+
+    def _jlpt_breakdown(
+        self, content_table: str, progress_table: str, fk_col: str, user_id: str
+    ) -> list[JlptMastery]:
+        content_rows = self.db.table(content_table).select("id, jlpt_level").execute().data or []
+        progress_rows = (
+            self.db.table(progress_table)
+            .select(f"{fk_col}, review_score")
+            .eq("user_id", user_id)
+            .execute()
+        ).data or []
+        score_map = {r[fk_col]: float(r.get("review_score") or 0) for r in progress_rows}
+
+        scores_by_level: dict[str, list[float]] = {}
+        reviewed_by_level: dict[str, int] = {}
+        for row in content_rows:
+            level = row.get("jlpt_level") or "unknown"
+            score = score_map.get(row["id"])
+            scores_by_level.setdefault(level, []).append(score if score is not None else 0.0)
+            if score is not None:
+                reviewed_by_level[level] = reviewed_by_level.get(level, 0) + 1
+
+        result = []
+        for level in _JLPT_ORDER:
+            scores = scores_by_level.get(level)
+            if not scores:
+                continue
+            result.append(
+                JlptMastery(
+                    jlpt_level=level,
+                    total=len(scores),
+                    reviewed=reviewed_by_level.get(level, 0),
+                    avg_score=round(sum(scores) / len(scores), 1),
+                )
+            )
+        return result
 
     def _exam_avg(self, user_id: str, subject: str) -> tuple[float | None, int]:
         rows = (

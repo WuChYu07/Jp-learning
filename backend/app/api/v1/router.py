@@ -1,9 +1,22 @@
 from fastapi import APIRouter
 
-from app.api.v1 import dashboard, grammar, ingestion, jlpt, links, notion, practice, quiz, songs, vocab
+from app.api.v1 import (
+    dashboard,
+    export,
+    grammar,
+    ingestion,
+    jlpt,
+    links,
+    notion,
+    practice,
+    quiz,
+    songs,
+    vocab,
+)
 
 api_router = APIRouter()
 api_router.include_router(ingestion.router, prefix="/ingestion", tags=["ingestion"])
+api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(notion.router, prefix="/notion", tags=["notion"])
 api_router.include_router(vocab.router, prefix="/vocab", tags=["vocab"])
 api_router.include_router(grammar.router, prefix="/grammar", tags=["grammar"])
