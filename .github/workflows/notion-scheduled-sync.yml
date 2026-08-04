@@ -5,7 +5,11 @@ name: Scheduled Notion sync check
 # a banner on the Upload page next time you open it.
 on:
   schedule:
-    - cron: "0 22 * * *" # daily 22:00 UTC (~06:00 next day in UTC+8)
+    # Runs on UTC day-of-month 1,4,7,... (cron has no native "every N days"
+    # relative to an arbitrary start date, so this is the standard
+    # approximation — the gap across a month boundary can be 1-3 days
+    # instead of exactly 3).
+    - cron: "0 22 */3 * *" # every 3rd day, 22:00 UTC (~06:00 next day in UTC+8)
   workflow_dispatch: {}
 
 jobs:
