@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
@@ -1047,7 +1047,7 @@ function ExampleBlock({
   return (
     <div className="rounded-xl bg-green-50 p-4">
       <p className="kanji-display text-base leading-relaxed">
-        {renderHighlightedJapanese(example.japanese, example.highlight, grammarPoint)}
+        {renderHighlightedJapanese(example.japanese, exampleMarks(example), grammarPoint)}
       </p>
       {example.reading && (
         <p className="mt-0.5 text-xs text-stone-400">{example.reading}</p>
@@ -1057,6 +1057,12 @@ function ExampleBlock({
       )}
     </div>
   );
+}
+
+/** Merge new multi-mark `highlights` with the legacy single `highlight` field. */
+function exampleMarks(example: ExampleSentence): string[] {
+  if (example.highlights?.length) return example.highlights;
+  return example.highlight ? [example.highlight] : [];
 }
 
 /** Build candidate substrings from grammar_point like 「〜おきに」「〜つもりだ」. */
@@ -1077,21 +1083,38 @@ function grammarHighlightCandidates(grammarPoint: string): string[] {
   return unique.filter((c) => c.length >= 1);
 }
 
-function findHighlightRange(
+type HighlightRange = { start: number; end: number };
+
+function addRange(ranges: HighlightRange[], start: number, end: number) {
+  const overlaps = ranges.some((r) => start < r.end && end > r.start);
+  if (!overlaps) ranges.push({ start, end });
+}
+
+function findHighlightRanges(
   japanese: string,
-  explicit: string | undefined,
+  explicitMarks: string[],
   grammarPoint: string,
-): { start: number; end: number } | null {
-  if (explicit?.trim()) {
-    const needle = explicit.trim();
+): HighlightRange[] {
+  const ranges: HighlightRange[] = [];
+
+  for (const mark of explicitMarks) {
+    const needle = mark.trim();
+    if (!needle) continue;
     const idx = japanese.indexOf(needle);
-    if (idx >= 0) return { start: idx, end: idx + needle.length };
+    if (idx >= 0) addRange(ranges, idx, idx + needle.length);
+  }
+  if (ranges.length > 0) {
+    return ranges.sort((a, b) => a.start - b.start);
   }
 
   for (const candidate of grammarHighlightCandidates(grammarPoint)) {
     const idx = japanese.indexOf(candidate);
-    if (idx >= 0) return { start: idx, end: idx + candidate.length };
+    if (idx >= 0) {
+      addRange(ranges, idx, idx + candidate.length);
+      break;
+    }
   }
+  if (ranges.length > 0) return ranges;
 
   // Soft match: ignore 〜 and try core token again inside conjugated forms
   // e.g. grammar 「つもりだ」 in sentence 「つもりだった」 → highlight 「つもりだ」
@@ -1102,31 +1125,35 @@ function findHighlightRange(
     .trim();
   if (core.length >= 2) {
     const idx = japanese.indexOf(core);
-    if (idx >= 0) return { start: idx, end: idx + core.length };
+    if (idx >= 0) addRange(ranges, idx, idx + core.length);
   }
 
-  return null;
+  return ranges;
 }
 
 function renderHighlightedJapanese(
   japanese: string,
-  explicitHighlight: string | undefined,
+  explicitMarks: string[],
   grammarPoint: string,
 ) {
-  const range = findHighlightRange(japanese, explicitHighlight, grammarPoint);
-  if (!range) return japanese;
+  const ranges = findHighlightRanges(japanese, explicitMarks, grammarPoint);
+  if (ranges.length === 0) return japanese;
 
-  const before = japanese.slice(0, range.start);
-  const mid = japanese.slice(range.start, range.end);
-  const after = japanese.slice(range.end);
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  ranges.forEach((range, i) => {
+    if (range.start > cursor) nodes.push(japanese.slice(cursor, range.start));
+    nodes.push(
+      <mark
+        key={i}
+        className="rounded px-0.5 bg-orange-200/90 font-bold text-[var(--color-primary-dark)] not-italic"
+      >
+        {japanese.slice(range.start, range.end)}
+      </mark>,
+    );
+    cursor = range.end;
+  });
+  if (cursor < japanese.length) nodes.push(japanese.slice(cursor));
 
-  return (
-    <>
-      {before}
-      <mark className="rounded px-0.5 bg-orange-200/90 font-bold text-[var(--color-primary-dark)] not-italic">
-        {mid}
-      </mark>
-      {after}
-    </>
-  );
+  return <>{nodes}</>;
 }

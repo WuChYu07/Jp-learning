@@ -16,13 +16,23 @@ type FormDraft = {
 
 const JLPT_OPTIONS = ["unknown", "N5", "N4", "N3", "N2", "N1", "N3/N2", "N4/N3", "N2/N1"];
 
+function emptyExample(): ExampleSentence {
+  return { japanese: "", reading: "", chinese: "", highlights: [] };
+}
+
 function emptyUsage(): UsageDraft {
   return {
     semantic_concept: "",
     connection_rule: "",
     meaning_zh: "",
-    example_sentences: [{ japanese: "", reading: "", chinese: "", highlight: "" }],
+    example_sentences: [emptyExample()],
   };
+}
+
+/** Merge legacy single `highlight` into `highlights` when loading old data. */
+function marksOf(ex: ExampleSentence): string[] {
+  if (ex.highlights?.length) return ex.highlights;
+  return ex.highlight ? [ex.highlight] : [];
 }
 
 function fromGrammar(grammar: Grammar): FormDraft {
@@ -41,9 +51,9 @@ function fromGrammar(grammar: Grammar): FormDraft {
                     japanese: ex.japanese || "",
                     reading: ex.reading || "",
                     chinese: ex.chinese || "",
-                    highlight: ex.highlight || "",
+                    highlights: marksOf(ex),
                   }))
-                : [{ japanese: "", reading: "", chinese: "", highlight: "" }],
+                : [emptyExample()],
           }))
         : [emptyUsage()],
   };
@@ -71,7 +81,7 @@ function toPayload(draft: FormDraft): GrammarWriteInput {
           japanese: ex.japanese.trim(),
           reading: ex.reading?.trim() || undefined,
           chinese: ex.chinese?.trim() || undefined,
-          highlight: ex.highlight?.trim() || undefined,
+          highlights: (ex.highlights ?? []).map((h) => h.trim()).filter(Boolean),
         })),
     })),
   };
@@ -113,12 +123,24 @@ export default function GrammarForm({
     usageIndex: number,
     exampleIndex: number,
     input: HTMLTextAreaElement,
+    existing: string[],
   ) {
     const { selectionStart, selectionEnd, value } = input;
     if (selectionStart == null || selectionEnd == null || selectionStart === selectionEnd) return;
-    const text = value.slice(selectionStart, selectionEnd);
-    if (!text.trim()) return;
-    updateExample(usageIndex, exampleIndex, { highlight: text });
+    const text = value.slice(selectionStart, selectionEnd).trim();
+    if (!text || existing.includes(text)) return;
+    updateExample(usageIndex, exampleIndex, { highlights: [...existing, text] });
+  }
+
+  function removeHighlight(
+    usageIndex: number,
+    exampleIndex: number,
+    existing: string[],
+    mark: string,
+  ) {
+    updateExample(usageIndex, exampleIndex, {
+      highlights: existing.filter((h) => h !== mark),
+    });
   }
 
   function updateExample(
@@ -292,10 +314,7 @@ export default function GrammarForm({
                   type="button"
                   onClick={() =>
                     updateUsage(usageIndex, {
-                      example_sentences: [
-                        ...usage.example_sentences,
-                        { japanese: "", reading: "", chinese: "", highlight: "" },
-                      ],
+                      example_sentences: [...usage.example_sentences, emptyExample()],
                     })
                   }
                   className="text-xs font-semibold text-orange-700"
@@ -303,7 +322,9 @@ export default function GrammarForm({
                   ＋ 例句
                 </button>
               </div>
-              {usage.example_sentences.map((ex, exIndex) => (
+              {usage.example_sentences.map((ex, exIndex) => {
+                const marks = ex.highlights ?? [];
+                return (
                 <div
                   key={exIndex}
                   className="space-y-2 rounded-lg bg-white p-3 ring-1 ring-stone-100"
@@ -313,27 +334,36 @@ export default function GrammarForm({
                     onChange={(e) =>
                       updateExample(usageIndex, exIndex, { japanese: e.target.value })
                     }
-                    onMouseUp={(e) => markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget)}
-                    onKeyUp={(e) => markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget)}
+                    onMouseUp={(e) =>
+                      markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget, marks)
+                    }
+                    onKeyUp={(e) =>
+                      markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget, marks)
+                    }
                     rows={1}
                     className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="日文例句"
-                    title="反白選取文法重點的部分，會自動標記"
+                    title="反白選取文法重點的部分，會自動標記（可反白多處）"
                   />
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-400">
-                    <span>反白日文例句中的文字可標記文法重點：</span>
-                    {ex.highlight ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 font-semibold text-orange-800">
-                        {ex.highlight}
-                        <button
-                          type="button"
-                          onClick={() => updateExample(usageIndex, exIndex, { highlight: "" })}
-                          className="text-orange-500 hover:text-orange-700"
-                          aria-label="清除標記"
+                    <span>反白日文例句中的文字可標記文法重點（可多個）：</span>
+                    {marks.length > 0 ? (
+                      marks.map((mark) => (
+                        <span
+                          key={mark}
+                          className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 font-semibold text-orange-800"
                         >
-                          ×
-                        </button>
-                      </span>
+                          {mark}
+                          <button
+                            type="button"
+                            onClick={() => removeHighlight(usageIndex, exIndex, marks, mark)}
+                            className="text-orange-500 hover:text-orange-700"
+                            aria-label="清除標記"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
                     ) : (
                       <span className="italic">尚無標記</span>
                     )}
@@ -374,7 +404,8 @@ export default function GrammarForm({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}

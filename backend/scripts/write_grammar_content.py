@@ -17,7 +17,7 @@ db = get_supabase_client()
 
 def write_content(grammar_id: str, jlpt_level: str, usages: list[dict]) -> None:
     """usages: list of {semantic_concept, connection_rule, meaning_zh,
-    meaning_blocks: [{text, variant}], example_sentences: [{japanese, reading, chinese, highlight}]}
+    meaning_blocks: [{text, variant}], example_sentences: [{japanese, reading, chinese, highlights}]}
     """
     db.table("grammars").update({"jlpt_level": jlpt_level}).eq("id", grammar_id).execute()
     db.table("grammar_usages").delete().eq("grammar_id", grammar_id).execute()

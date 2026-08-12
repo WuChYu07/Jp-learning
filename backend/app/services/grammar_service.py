@@ -58,7 +58,7 @@ def _usage_rows_from_write(grammar_id: UUID, usages: list[GrammarUsageWrite]) ->
                         "japanese": ex.japanese,
                         "reading": ex.reading,
                         "chinese": ex.chinese,
-                        "highlight": getattr(ex, "highlight", None),
+                        "highlights": [h for h in (ex.highlights or []) if (h or "").strip()],
                     }
                     for ex in usage.example_sentences
                     if (ex.japanese or "").strip()

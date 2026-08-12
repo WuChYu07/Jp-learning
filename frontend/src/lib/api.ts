@@ -13,8 +13,10 @@ export type ExampleSentence = {
   japanese: string;
   reading?: string;
   chinese?: string;
-  /** Substring of japanese that is the target grammar form. */
+  /** Legacy single substring of japanese that is the target grammar form. */
   highlight?: string;
+  /** Substrings of japanese that are the target grammar form(s). */
+  highlights?: string[];
 };
 
 export type MeaningBlock = {

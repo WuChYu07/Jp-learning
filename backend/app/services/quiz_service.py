@@ -402,7 +402,7 @@ class QuizService:
                     continue
                 blank = _find_blank_span(
                     japanese,
-                    explicit=(s.get("highlight") or "").strip() or None,
+                    explicit=_first_highlight(s),
                     fallback=word,
                 )
                 if not blank:
@@ -451,7 +451,7 @@ class QuizService:
                     continue
                 blank = _find_blank_span(
                     japanese,
-                    explicit=(s.get("highlight") or "").strip() or None,
+                    explicit=_first_highlight(s),
                     fallback=point,
                 )
                 if not blank:
@@ -673,6 +673,14 @@ class QuizService:
 
 
 quiz_service = QuizService()
+
+
+def _first_highlight(sentence: dict) -> str | None:
+    """First mark from `highlights` (new, multi-mark), else legacy `highlight`."""
+    highlights = sentence.get("highlights") or []
+    if highlights:
+        return (highlights[0] or "").strip() or None
+    return (sentence.get("highlight") or "").strip() or None
 
 
 def _find_blank_span(

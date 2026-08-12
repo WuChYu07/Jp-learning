@@ -38,8 +38,11 @@ class ExampleSentence(BaseModel):
     reading: str | None = None
     chinese: str | None = None
     english: str | None = None
-    # Substring of japanese that is the target grammar form (for UI highlight).
+    # Legacy single substring of japanese to highlight; superseded by `highlights`
+    # but kept for old rows and the vocab cloze-quiz blank-span lookup.
     highlight: str | None = None
+    # Substrings of japanese that are the target grammar form(s) (for UI highlight).
+    highlights: list[str] = Field(default_factory=list)
     acceptable_patterns: list[str] = Field(default_factory=list)
 
 

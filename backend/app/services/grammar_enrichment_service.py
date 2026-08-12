@@ -46,7 +46,7 @@ _IMAGE_PROMPT = """你是一位日文文法老師，擅長把學習筆記圖片�
   - variant：emphasis（核心語意）、note（補充說明）、caution（易混淆/注意）、default（一般說明）
 - meaning_zh：可填 meaning_blocks 各段 text 以換行合併，方便搜尋。
 - example_sentences：只收圖上出現的例句；保留日文原文；有假名注音才填 reading；有中文翻譯才填 chinese。
-  每句務必填 highlight：例句 japanese 中「屬於此文法」的連續子字串（如「おきに」「つもりだった」），必須能在 japanese 中原樣找到。
+  每句務必填 highlights（陣列）：例句 japanese 中「屬於此文法」的連續子字串（如「おきに」「つもりだった」），可包含多個重點時就填多個，每個都必須能在 japanese 中原樣找到。
 
 ## 補充圖片 supplementary_blocks
 - 若部分圖片是「補充、對比、易錯點、延伸說明」（而非主文法卡），為這些內容另建 1+ 個 supplementary_blocks。
@@ -85,7 +85,7 @@ _EXPLAIN_PROMPT = """你是一位日文文法老師，請為學習者撰寫完�
   - variant：emphasis（核心語意）、note（補充）、caution（易混淆）、default
 - meaning_zh：各段 text 換行合併。
 - example_sentences：每用法 2–3 句自然例句；japanese 必填；盡量附 reading（平假名）與 chinese。
-  每句務必填 highlight：japanese 中屬於此文法的連續子字串（活用形也要標完整，如「つもりだった」），必須能在 japanese 中原樣找到。
+  每句務必填 highlights（陣列）：japanese 中屬於此文法的連續子字串（活用形也要標完整，如「つもりだった」），可包含多個重點時就填多個，每個都必須能在 japanese 中原樣找到。
 
 ## 補充 supplementary_blocks
 - 若有重要對比（如與相似文法差別）、使用時機、常見錯誤，可放 0–2 個補充區塊。
@@ -384,7 +384,7 @@ class GrammarEnrichmentService:
                             "japanese": ex.japanese,
                             "reading": ex.reading,
                             "chinese": ex.chinese,
-                            "highlight": ex.highlight,
+                            "highlights": ex.highlights,
                         }
                         for ex in usage.example_sentences
                     ],
