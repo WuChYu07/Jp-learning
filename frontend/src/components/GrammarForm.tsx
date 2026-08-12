@@ -119,6 +119,21 @@ export default function GrammarForm({
     }));
   }
 
+  /** Wraps the current textarea selection in `==...==` so it renders as highlighted. */
+  function wrapSelectionAsMark(
+    usageIndex: number,
+    field: "semantic_concept" | "connection_rule" | "meaning_zh",
+    input: HTMLTextAreaElement,
+  ) {
+    const { selectionStart, selectionEnd, value } = input;
+    if (selectionStart == null || selectionEnd == null || selectionStart === selectionEnd) return;
+    const selected = value.slice(selectionStart, selectionEnd);
+    if (!selected.trim() || selected.includes("==") || selected.includes("~~")) return;
+    const before = value.slice(0, selectionStart);
+    const after = value.slice(selectionEnd);
+    updateUsage(usageIndex, { [field]: `${before}==${selected}==${after}` });
+  }
+
   function markSelectionAsHighlight(
     usageIndex: number,
     exampleIndex: number,
@@ -128,7 +143,7 @@ export default function GrammarForm({
     const { selectionStart, selectionEnd, value } = input;
     if (selectionStart == null || selectionEnd == null || selectionStart === selectionEnd) return;
     const text = value.slice(selectionStart, selectionEnd).trim();
-    if (!text || existing.includes(text)) return;
+    if (!text) return;
     updateExample(usageIndex, exampleIndex, { highlights: [...existing, text] });
   }
 
@@ -136,10 +151,10 @@ export default function GrammarForm({
     usageIndex: number,
     exampleIndex: number,
     existing: string[],
-    mark: string,
+    markIndex: number,
   ) {
     updateExample(usageIndex, exampleIndex, {
-      highlights: existing.filter((h) => h !== mark),
+      highlights: existing.filter((_, i) => i !== markIndex),
     });
   }
 
@@ -273,10 +288,18 @@ export default function GrammarForm({
             </div>
 
             <label className="block space-y-1">
-              <span className="text-xs font-semibold text-stone-500">中文語意標題</span>
+              <span className="text-xs font-semibold text-stone-500">
+                中文語意標題（反白文字可標記重點）
+              </span>
               <textarea
                 value={usage.semantic_concept}
                 onChange={(e) => updateUsage(usageIndex, { semantic_concept: e.target.value })}
+                onMouseUp={(e) =>
+                  wrapSelectionAsMark(usageIndex, "semantic_concept", e.currentTarget)
+                }
+                onKeyUp={(e) =>
+                  wrapSelectionAsMark(usageIndex, "semantic_concept", e.currentTarget)
+                }
                 rows={1}
                 className="w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder="例：表示每隔固定間隔"
@@ -285,11 +308,17 @@ export default function GrammarForm({
 
             <label className="block space-y-1">
               <span className="text-xs font-semibold text-stone-500">
-                接續規則（多行可用 Enter；用 ~~文字~~ 畫刪除線標示排除的用法）
+                接續規則（多行可用 Enter；反白文字可標記重點；用 ~~文字~~ 畫刪除線標示排除的用法）
               </span>
               <textarea
                 value={usage.connection_rule}
                 onChange={(e) => updateUsage(usageIndex, { connection_rule: e.target.value })}
+                onMouseUp={(e) =>
+                  wrapSelectionAsMark(usageIndex, "connection_rule", e.currentTarget)
+                }
+                onKeyUp={(e) =>
+                  wrapSelectionAsMark(usageIndex, "connection_rule", e.currentTarget)
+                }
                 rows={3}
                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder={"* V 普通形 + かな\n* なA / N + ~~だ~~／である"}
@@ -297,10 +326,14 @@ export default function GrammarForm({
             </label>
 
             <label className="block space-y-1">
-              <span className="text-xs font-semibold text-stone-500">中文說明</span>
+              <span className="text-xs font-semibold text-stone-500">
+                中文說明（反白文字可標記重點）
+              </span>
               <textarea
                 value={usage.meaning_zh}
                 onChange={(e) => updateUsage(usageIndex, { meaning_zh: e.target.value })}
+                onMouseUp={(e) => wrapSelectionAsMark(usageIndex, "meaning_zh", e.currentTarget)}
+                onKeyUp={(e) => wrapSelectionAsMark(usageIndex, "meaning_zh", e.currentTarget)}
                 rows={2}
                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder="說明這個用法的意思"
@@ -348,15 +381,15 @@ export default function GrammarForm({
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-400">
                     <span>反白日文例句中的文字可標記文法重點（可多個）：</span>
                     {marks.length > 0 ? (
-                      marks.map((mark) => (
+                      marks.map((mark, markIndex) => (
                         <span
-                          key={mark}
+                          key={markIndex}
                           className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 font-semibold text-orange-800"
                         >
                           {mark}
                           <button
                             type="button"
-                            onClick={() => removeHighlight(usageIndex, exIndex, marks, mark)}
+                            onClick={() => removeHighlight(usageIndex, exIndex, marks, markIndex)}
                             className="text-orange-500 hover:text-orange-700"
                             aria-label="清除標記"
                           >

@@ -11,6 +11,7 @@ from app.api.v1 import (
     practice,
     quiz,
     songs,
+    speech,
     vocab,
 )
 
@@ -26,3 +27,4 @@ api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboar
 api_router.include_router(quiz.router, prefix="/quiz", tags=["quiz"])
 api_router.include_router(practice.router, prefix="/practice", tags=["practice"])
 api_router.include_router(songs.router, prefix="/songs", tags=["songs"])
+api_router.include_router(speech.router, prefix="/speech", tags=["speech"])

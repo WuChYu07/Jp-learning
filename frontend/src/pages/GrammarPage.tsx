@@ -17,7 +17,7 @@ import {
   formatUserFacingError,
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
-import { renderStrikethrough } from "../lib/textFormat";
+import { renderFormattedText, stripFormatting } from "../lib/textFormat";
 
 const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1", "unknown"] as const;
 const JLPT_FILTER_LABELS: Partial<Record<(typeof JLPT_FILTERS)[number], string>> = {
@@ -796,7 +796,7 @@ function UsageNavigator({
 }
 
 function usageNavLabel(usage: GrammarUsage, index: number): string {
-  const title = resolveChineseTitle(usage);
+  const title = stripFormatting(resolveChineseTitle(usage));
   if (!title) return `用法 ${index + 1}`;
   return title.length > 16 ? `${title.slice(0, 16)}…` : title;
 }
@@ -869,14 +869,20 @@ function UsageCard({
             <p className="text-xs font-bold tracking-wide opacity-80">
               用法 {index + 1}／{total}
             </p>
-            {title && <p className="mt-0.5 text-lg font-bold leading-snug">{title}</p>}
+            {title && (
+              <p className="mt-0.5 text-lg font-bold leading-snug">
+                {renderFormattedText(title)}
+              </p>
+            )}
           </div>
         </div>
       )}
 
       <div className={`space-y-3 ${multi ? "p-5 pt-4" : "p-5"}`}>
         {!multi && title && (
-          <p className="text-lg font-bold text-[var(--color-primary-dark)]">{title}</p>
+          <p className="text-lg font-bold text-[var(--color-primary-dark)]">
+            {renderFormattedText(title)}
+          </p>
         )}
 
         {blocks.length > 0 && (
@@ -886,7 +892,7 @@ function UsageCard({
                 key={i}
                 className={`rounded-xl p-4 text-sm font-bold leading-relaxed ring-1 ${MEANING_BLOCK_STYLES[block.variant]}`}
               >
-                {block.text}
+                {renderFormattedText(block.text)}
               </div>
             ))}
           </div>
@@ -952,7 +958,7 @@ function ConnectionRules({ rule }: { rule: string }) {
   if (lines.length <= 1) {
     return (
       <p className="mt-1 text-sm font-semibold leading-relaxed">
-        {renderStrikethrough(rule)}
+        {renderFormattedText(rule)}
       </p>
     );
   }
@@ -962,7 +968,7 @@ function ConnectionRules({ rule }: { rule: string }) {
       {lines.map((line, index) => (
         <li key={index} className="flex gap-2 text-sm font-semibold leading-relaxed">
           <span className="shrink-0 text-orange-600">*</span>
-          <span>{renderStrikethrough(line)}</span>
+          <span>{renderFormattedText(line)}</span>
         </li>
       ))}
     </ul>
@@ -1046,9 +1052,12 @@ function ExampleBlock({
 }) {
   return (
     <div className="rounded-xl bg-green-50 p-4">
-      <p className="kanji-display text-base leading-relaxed">
-        {renderHighlightedJapanese(example.japanese, exampleMarks(example), grammarPoint)}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="kanji-display min-w-0 flex-1 text-base leading-relaxed">
+          {renderHighlightedJapanese(example.japanese, exampleMarks(example), grammarPoint)}
+        </p>
+        <SpeakButton size="sm" text={example.japanese} label="播放例句發音" caption="播例句" />
+      </div>
       {example.reading && (
         <p className="mt-0.5 text-xs text-stone-400">{example.reading}</p>
       )}
@@ -1090,6 +1099,25 @@ function addRange(ranges: HighlightRange[], start: number, end: number) {
   if (!overlaps) ranges.push({ start, end });
 }
 
+/** Finds the first occurrence of `needle` not already claimed by `ranges`,
+ * so the same word appearing multiple times can each get its own mark. */
+function findNextOccurrence(
+  japanese: string,
+  needle: string,
+  ranges: HighlightRange[],
+): HighlightRange | null {
+  let from = 0;
+  while (from <= japanese.length) {
+    const idx = japanese.indexOf(needle, from);
+    if (idx < 0) return null;
+    const end = idx + needle.length;
+    const overlaps = ranges.some((r) => idx < r.end && end > r.start);
+    if (!overlaps) return { start: idx, end };
+    from = idx + 1;
+  }
+  return null;
+}
+
 function findHighlightRanges(
   japanese: string,
   explicitMarks: string[],
@@ -1100,8 +1128,8 @@ function findHighlightRanges(
   for (const mark of explicitMarks) {
     const needle = mark.trim();
     if (!needle) continue;
-    const idx = japanese.indexOf(needle);
-    if (idx >= 0) addRange(ranges, idx, idx + needle.length);
+    const found = findNextOccurrence(japanese, needle, ranges);
+    if (found) ranges.push(found);
   }
   if (ranges.length > 0) {
     return ranges.sort((a, b) => a.start - b.start);

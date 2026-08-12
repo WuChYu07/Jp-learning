@@ -6,6 +6,7 @@ import GrammarReviewPage from "./pages/GrammarReviewPage";
 import KnowledgeMapPage from "./pages/KnowledgeMapPage";
 import PracticePage from "./pages/PracticePage";
 import QuizPage from "./pages/QuizPage";
+import SettingsPage from "./pages/SettingsPage";
 import SongsPage from "./pages/SongsPage";
 import UploadPage from "./pages/UploadPage";
 import VocabPage from "./pages/VocabPage";
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/practice" element={<PracticePage />} />
         <Route path="/songs" element={<SongsPage />} />
         <Route path="/upload" element={<UploadPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

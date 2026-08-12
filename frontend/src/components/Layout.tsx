@@ -11,6 +11,7 @@ const NAV = [
   { to: "/practice", label: "Practice", end: false },
   { to: "/songs", label: "Songs", end: false },
   { to: "/upload", label: "Upload", end: false },
+  { to: "/settings", label: "Settings", end: false },
 ] as const;
 
 const BOTTOM_NAV = [

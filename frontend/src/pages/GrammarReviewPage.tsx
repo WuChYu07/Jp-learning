@@ -4,7 +4,7 @@ import RelationHints from "../components/RelationHints";
 import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import { api, Grammar } from "../lib/api";
-import { renderStrikethrough } from "../lib/textFormat";
+import { renderFormattedText } from "../lib/textFormat";
 
 const BATCH_SIZE = 10;
 
@@ -244,17 +244,21 @@ export default function GrammarReviewPage() {
               caption="點我發音"
             />
             {usage?.semantic_concept && (
-              <p className="mt-4 text-base text-stone-500">{usage.semantic_concept}</p>
+              <p className="mt-4 text-base text-stone-500">
+                {renderFormattedText(usage.semantic_concept)}
+              </p>
             )}
           </>
         }
         back={
           <>
-            <p className="text-2xl font-semibold text-[var(--color-primary-dark)]">{meaning}</p>
+            <p className="text-2xl font-semibold text-[var(--color-primary-dark)]">
+              {renderFormattedText(meaning)}
+            </p>
             {usage?.connection_rule && (
               <p className="mt-4 text-left text-sm text-stone-600">
                 <span className="font-semibold">接續：</span>
-                {renderStrikethrough(usage.connection_rule)}
+                {renderFormattedText(usage.connection_rule)}
               </p>
             )}
             {example && (

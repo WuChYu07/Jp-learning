@@ -1012,4 +1012,14 @@ export const api = {
    * (Content-Disposition: attachment), so a multi-MB payload never needs to
    * pass through a JS fetch/blob round trip. */
   exportBackupUrl: () => `${API_BASE}/api/v1/export`,
+
+  // ── Speech ──
+  /** Gemini-generated speech, cached in Supabase Storage by (voice, text) hash. */
+  getSpeechUrl: (text: string, voice?: string) =>
+    request<{ url: string }>("/api/v1/speech", {
+      method: "POST",
+      body: JSON.stringify({ text, voice }),
+    }),
+  listVoices: () =>
+    request<{ voices: { name: string; style: string }[] }>("/api/v1/speech/voices"),
 };

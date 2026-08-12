@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEYS: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    # Native Gemini text-to-speech (separate model family from GEMINI_MODEL).
+    GEMINI_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"
+    # One of the prebuilt Gemini voices (Kore, Puck, Zephyr, Leda, ...).
+    GEMINI_TTS_VOICE: str = "Kore"
+    TTS_STORAGE_BUCKET: str = "tts-audio"
     EMBEDDING_DIM: int = 768
     # Grammar-note embeddings cluster tightly; keep threshold high (P3: raised to cut weak links).
     EMBEDDING_SIMILARITY_THRESHOLD: float = 0.93
