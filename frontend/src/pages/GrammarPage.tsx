@@ -17,6 +17,7 @@ import {
   formatUserFacingError,
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
+import { renderStrikethrough } from "../lib/textFormat";
 
 const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1", "unknown"] as const;
 const JLPT_FILTER_LABELS: Partial<Record<(typeof JLPT_FILTERS)[number], string>> = {
@@ -949,7 +950,11 @@ function ConnectionRules({ rule }: { rule: string }) {
   const lines = splitConnectionRules(rule);
 
   if (lines.length <= 1) {
-    return <p className="mt-1 text-sm font-semibold leading-relaxed">{rule}</p>;
+    return (
+      <p className="mt-1 text-sm font-semibold leading-relaxed">
+        {renderStrikethrough(rule)}
+      </p>
+    );
   }
 
   return (
@@ -957,7 +962,7 @@ function ConnectionRules({ rule }: { rule: string }) {
       {lines.map((line, index) => (
         <li key={index} className="flex gap-2 text-sm font-semibold leading-relaxed">
           <span className="shrink-0 text-orange-600">*</span>
-          <span>{line}</span>
+          <span>{renderStrikethrough(line)}</span>
         </li>
       ))}
     </ul>

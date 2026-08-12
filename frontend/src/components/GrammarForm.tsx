@@ -21,7 +21,7 @@ function emptyUsage(): UsageDraft {
     semantic_concept: "",
     connection_rule: "",
     meaning_zh: "",
-    example_sentences: [{ japanese: "", reading: "", chinese: "" }],
+    example_sentences: [{ japanese: "", reading: "", chinese: "", highlight: "" }],
   };
 }
 
@@ -41,8 +41,9 @@ function fromGrammar(grammar: Grammar): FormDraft {
                     japanese: ex.japanese || "",
                     reading: ex.reading || "",
                     chinese: ex.chinese || "",
+                    highlight: ex.highlight || "",
                   }))
-                : [{ japanese: "", reading: "", chinese: "" }],
+                : [{ japanese: "", reading: "", chinese: "", highlight: "" }],
           }))
         : [emptyUsage()],
   };
@@ -70,6 +71,7 @@ function toPayload(draft: FormDraft): GrammarWriteInput {
           japanese: ex.japanese.trim(),
           reading: ex.reading?.trim() || undefined,
           chinese: ex.chinese?.trim() || undefined,
+          highlight: ex.highlight?.trim() || undefined,
         })),
     })),
   };
@@ -105,6 +107,18 @@ export default function GrammarForm({
       ...prev,
       usages: prev.usages.map((usage, i) => (i === index ? { ...usage, ...patch } : usage)),
     }));
+  }
+
+  function markSelectionAsHighlight(
+    usageIndex: number,
+    exampleIndex: number,
+    input: HTMLTextAreaElement,
+  ) {
+    const { selectionStart, selectionEnd, value } = input;
+    if (selectionStart == null || selectionEnd == null || selectionStart === selectionEnd) return;
+    const text = value.slice(selectionStart, selectionEnd);
+    if (!text.trim()) return;
+    updateExample(usageIndex, exampleIndex, { highlight: text });
   }
 
   function updateExample(
@@ -174,10 +188,11 @@ export default function GrammarForm({
 
       <label className="block space-y-1">
         <span className="text-xs font-semibold text-stone-500">文法標題</span>
-        <input
+        <textarea
           value={draft.grammar_point}
           onChange={(e) => setDraft((prev) => ({ ...prev, grammar_point: e.target.value }))}
-          className="w-full rounded-xl border border-orange-100 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-orange-300"
+          rows={1}
+          className="w-full resize-y rounded-xl border border-orange-100 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-orange-300"
           placeholder="例：〜おきに"
           required
         />
@@ -237,22 +252,25 @@ export default function GrammarForm({
 
             <label className="block space-y-1">
               <span className="text-xs font-semibold text-stone-500">中文語意標題</span>
-              <input
+              <textarea
                 value={usage.semantic_concept}
                 onChange={(e) => updateUsage(usageIndex, { semantic_concept: e.target.value })}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
+                rows={1}
+                className="w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder="例：表示每隔固定間隔"
               />
             </label>
 
             <label className="block space-y-1">
-              <span className="text-xs font-semibold text-stone-500">接續規則（多行可用 Enter）</span>
+              <span className="text-xs font-semibold text-stone-500">
+                接續規則（多行可用 Enter；用 ~~文字~~ 畫刪除線標示排除的用法）
+              </span>
               <textarea
                 value={usage.connection_rule}
                 onChange={(e) => updateUsage(usageIndex, { connection_rule: e.target.value })}
                 rows={3}
                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
-                placeholder={"* V 普通形 + かな\n* なA / N + かな"}
+                placeholder={"* V 普通形 + かな\n* なA / N + ~~だ~~／である"}
               />
             </label>
 
@@ -276,7 +294,7 @@ export default function GrammarForm({
                     updateUsage(usageIndex, {
                       example_sentences: [
                         ...usage.example_sentences,
-                        { japanese: "", reading: "", chinese: "" },
+                        { japanese: "", reading: "", chinese: "", highlight: "" },
                       ],
                     })
                   }
@@ -290,28 +308,52 @@ export default function GrammarForm({
                   key={exIndex}
                   className="space-y-2 rounded-lg bg-white p-3 ring-1 ring-stone-100"
                 >
-                  <input
+                  <textarea
                     value={ex.japanese}
                     onChange={(e) =>
                       updateExample(usageIndex, exIndex, { japanese: e.target.value })
                     }
-                    className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
+                    onMouseUp={(e) => markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget)}
+                    onKeyUp={(e) => markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget)}
+                    rows={1}
+                    className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="日文例句"
+                    title="反白選取文法重點的部分，會自動標記"
                   />
-                  <input
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-400">
+                    <span>反白日文例句中的文字可標記文法重點：</span>
+                    {ex.highlight ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 font-semibold text-orange-800">
+                        {ex.highlight}
+                        <button
+                          type="button"
+                          onClick={() => updateExample(usageIndex, exIndex, { highlight: "" })}
+                          className="text-orange-500 hover:text-orange-700"
+                          aria-label="清除標記"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="italic">尚無標記</span>
+                    )}
+                  </div>
+                  <textarea
                     value={ex.reading || ""}
                     onChange={(e) =>
                       updateExample(usageIndex, exIndex, { reading: e.target.value })
                     }
-                    className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
+                    rows={1}
+                    className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="讀音（可選）"
                   />
-                  <input
+                  <textarea
                     value={ex.chinese || ""}
                     onChange={(e) =>
                       updateExample(usageIndex, exIndex, { chinese: e.target.value })
                     }
-                    className="w-full rounded-md border border-stone-200 px-2 py-1.5 text-sm"
+                    rows={1}
+                    className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="中文翻譯（可選）"
                   />
                   {usage.example_sentences.length > 1 && (

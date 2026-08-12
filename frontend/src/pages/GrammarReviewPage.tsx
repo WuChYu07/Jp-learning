@@ -4,6 +4,7 @@ import RelationHints from "../components/RelationHints";
 import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import { api, Grammar } from "../lib/api";
+import { renderStrikethrough } from "../lib/textFormat";
 
 const BATCH_SIZE = 10;
 
@@ -253,7 +254,7 @@ export default function GrammarReviewPage() {
             {usage?.connection_rule && (
               <p className="mt-4 text-left text-sm text-stone-600">
                 <span className="font-semibold">接續：</span>
-                {usage.connection_rule}
+                {renderStrikethrough(usage.connection_rule)}
               </p>
             )}
             {example && (
