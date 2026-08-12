@@ -18,7 +18,12 @@ import {
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
 
-const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1"] as const;
+const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1", "unknown"] as const;
+const JLPT_FILTER_LABELS: Partial<Record<(typeof JLPT_FILTERS)[number], string>> = {
+  unknown: "Unknown（未分類）",
+};
+
+const SWIPE_NAV_PREF_KEY = "grammar-swipe-nav-enabled";
 
 function toGrammarSummary(g: Grammar): GrammarSummary {
   return {
@@ -73,6 +78,9 @@ export default function GrammarPage() {
   const [query, setQuery] = useState("");
   const [jlpt, setJlpt] = useState("");
   const [nextLoading, setNextLoading] = useState(false);
+  const [swipeNavEnabled, setSwipeNavEnabled] = useState(
+    () => localStorage.getItem(SWIPE_NAV_PREF_KEY) !== "off",
+  );
   const [enriching, setEnriching] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -176,6 +184,14 @@ export default function GrammarPage() {
       cancelled = true;
     };
   }, [selectedId]);
+
+  function toggleSwipeNav() {
+    setSwipeNavEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(SWIPE_NAV_PREF_KEY, next ? "on" : "off");
+      return next;
+    });
+  }
 
   async function goNextRandom() {
     if (nextLoading || editorMode !== "view") return;
@@ -364,7 +380,7 @@ export default function GrammarPage() {
           <option value="">全部 JLPT</option>
           {JLPT_FILTERS.filter(Boolean).map((level) => (
             <option key={level} value={level}>
-              {level}
+              {JLPT_FILTER_LABELS[level] ?? level}
             </option>
           ))}
         </select>
@@ -458,14 +474,36 @@ export default function GrammarPage() {
           {selected && (
           <SwipeNavigate
             onSwipeRight={() => void goNextRandom()}
-            disabled={nextLoading || editorMode !== "view"}
-            hint="右滑或按上方按鈕 → 下一個文法（低分優先）"
+            disabled={!swipeNavEnabled || nextLoading || editorMode !== "view"}
+            hint={
+              swipeNavEnabled
+                ? "右滑或按上方按鈕 → 下一個文法（低分優先）"
+                : "右滑已關閉；可按上方按鈕前往下一個文法"
+            }
           >
           <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-stone-500">
-                瀏覽詳情時可右滑切換下一筆
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-stone-500">
+                  {swipeNavEnabled ? "瀏覽詳情時可右滑切換下一筆" : "右滑切換已關閉"}
+                </p>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={swipeNavEnabled}
+                  onClick={toggleSwipeNav}
+                  title={swipeNavEnabled ? "關閉右滑切換下一筆" : "開啟右滑切換下一筆"}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    swipeNavEnabled ? "bg-[var(--color-primary)]" : "bg-stone-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                      swipeNavEnabled ? "translate-x-[18px]" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
               <button
                 type="button"
                 disabled={nextLoading || editorMode !== "view"}
