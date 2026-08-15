@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
 import SpeakButton from "../components/SpeakButton";
 import { api, formatUserFacingError } from "../lib/api";
-import { getPreferredVoice, setPreferredVoice } from "../lib/ttsPrefs";
+import { BROWSER_VOICE_OPTION, getPreferredVoice, setPreferredVoice } from "../lib/ttsPrefs";
 
 const SAMPLE_TEXT = "週末は友達と映画を見に行くつもりです。";
 const DEFAULT_VOICE = "Kore";
 
+type VoiceOption = { name: string; label: string; style: string };
+
+const BROWSER_OPTION: VoiceOption = {
+  name: BROWSER_VOICE_OPTION,
+  label: "Windows／瀏覽器預設語音",
+  style: "使用你電腦或瀏覽器安裝的語音（不經過 Gemini，免費但音質依裝置而定）",
+};
+
 export default function SettingsPage() {
-  const [voices, setVoices] = useState<{ name: string; style: string }[]>([]);
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [selected, setSelected] = useState(() => getPreferredVoice() ?? DEFAULT_VOICE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -15,7 +23,12 @@ export default function SettingsPage() {
   useEffect(() => {
     api
       .listVoices()
-      .then((res) => setVoices(res.voices))
+      .then((res) =>
+        setVoices([
+          BROWSER_OPTION,
+          ...res.voices.map((v) => ({ name: v.name, label: v.name, style: v.style })),
+        ]),
+      )
       .catch((err: unknown) => setError(formatUserFacingError(err)))
       .finally(() => setLoading(false));
   }, []);
@@ -36,7 +49,7 @@ export default function SettingsPage() {
         <div>
           <h2 className="text-lg font-bold text-[var(--color-primary-dark)]">發音語音</h2>
           <p className="mt-1 text-sm text-stone-500">
-            試聽下面幾種 Gemini 語音，選一個你喜歡的——全站的發音按鈕都會改用這個聲音。
+            試聽下面幾種 Gemini 語音（或改用瀏覽器內建語音），選一個你喜歡的——全站的發音按鈕都會改用這個選擇。
           </p>
         </div>
 
@@ -56,7 +69,7 @@ export default function SettingsPage() {
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-stone-800">
-                      {voice.name}
+                      {voice.label}
                       {isSelected && (
                         <span className="ml-2 rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-xs font-semibold text-white">
                           使用中
@@ -71,7 +84,7 @@ export default function SettingsPage() {
                       voiceOverride={voice.name}
                       size="sm"
                       caption="試聽"
-                      label={`試聽 ${voice.name} 語音`}
+                      label={`試聽 ${voice.label}`}
                     />
                     <button
                       type="button"

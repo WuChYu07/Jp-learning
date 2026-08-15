@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { api } from "../lib/api";
-import { getPreferredVoice } from "../lib/ttsPrefs";
+import { BROWSER_VOICE_OPTION, getPreferredVoice } from "../lib/ttsPrefs";
 
 type SpeakButtonProps = {
   text: string;
@@ -110,9 +110,14 @@ export default function SpeakButton({
 
     stopCurrent?.();
     stopCurrent = stop;
-    setState("loading");
 
     const voice = voiceOverride ?? getPreferredVoice();
+    if (voice === BROWSER_VOICE_OPTION) {
+      speakWithBrowserTts(normalized);
+      return;
+    }
+
+    setState("loading");
     const cacheKey = `${voice ?? "default"}::${normalized}`;
     const cached = speechUrlCache.get(cacheKey);
     if (cached) {
