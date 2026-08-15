@@ -37,6 +37,7 @@ export default function VocabPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [nextLoading, setNextLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const detailReqId = useRef(0);
   const viewedIds = useRef<Set<string>>(new Set());
   const loadHint = useSlowLoadHint(loading);
@@ -136,6 +137,28 @@ export default function VocabPage() {
       setError(err instanceof Error ? err.message : "無法載入下一個單字");
     } finally {
       setNextLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected || deleting) return;
+    const { primary } = vocabDisplay(selected.word, selected.reading);
+    const ok = window.confirm(
+      `確定刪除「${primary}」？\n\n將從列表移除；若來自 Notion，下次同步不會再自動加回。`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.deleteVocab(selected.id);
+      const next = items.filter((item) => item.id !== selected.id);
+      setItems(next);
+      setSelectedId(next[0]?.id ?? null);
+      setSelected(null);
+    } catch (err) {
+      setError(formatUserFacingError(err));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -294,6 +317,8 @@ export default function VocabPage() {
                   </div>
                   <VocabDetail
                     vocab={selected}
+                    onDelete={() => void handleDelete()}
+                    deleting={deleting}
                     onSaved={(updated) => {
                       setSelected(updated);
                       setItems((prev) =>
@@ -328,10 +353,14 @@ function VocabDetail({
   vocab,
   onSaved,
   onError,
+  onDelete,
+  deleting,
 }: {
   vocab: Vocabulary;
   onSaved: (updated: Vocabulary) => void;
   onError: (message: string) => void;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const [enriching, setEnriching] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -424,6 +453,14 @@ function VocabDetail({
               }
             >
               {enriching ? "產生中..." : "AI 補充"}
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              className="rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"
+            >
+              {deleting ? "刪除中..." : "刪除"}
             </button>
           </div>
         </div>

@@ -621,6 +621,8 @@ export const api = {
     }),
   aiEnrichVocab: (id: string) =>
     request<Vocabulary>(`/api/v1/vocab/${id}/ai-enrich`, { method: "POST" }),
+  deleteVocab: (id: string) =>
+    request<void>(`/api/v1/vocab/${id}`, { method: "DELETE" }),
   dueVocab: (limit = 10, offset = 0) =>
     request<ReviewBatchResponse>(
       `/api/v1/vocab/review/due?limit=${limit}&offset=${offset}`,

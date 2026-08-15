@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_effective_user_id
@@ -115,3 +115,9 @@ def get_vocabulary(
     user_id: Annotated[str | None, Depends(get_effective_user_id)],
 ) -> VocabularyOut:
     return vocab_service.get_vocab(vocabulary_id, user_id=user_id)
+
+
+@router.delete("/{vocabulary_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vocabulary(vocabulary_id: UUID) -> Response:
+    vocab_service.archive_vocabulary(vocabulary_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
