@@ -10,6 +10,7 @@ import { vocabDisplay } from "../lib/vocabDisplay";
 
 const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1"] as const;
 const PAGE_SIZE = 100;
+const SWIPE_NAV_PREF_KEY = "vocab-swipe-nav-enabled";
 
 const POS_LABELS: Record<string, string> = {
   noun: "名詞",
@@ -38,6 +39,9 @@ export default function VocabPage() {
   const [error, setError] = useState("");
   const [nextLoading, setNextLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [swipeNavEnabled, setSwipeNavEnabled] = useState(
+    () => localStorage.getItem(SWIPE_NAV_PREF_KEY) !== "off",
+  );
   const detailReqId = useRef(0);
   const viewedIds = useRef<Set<string>>(new Set());
   const loadHint = useSlowLoadHint(loading);
@@ -120,6 +124,14 @@ export default function VocabPage() {
         if (req === detailReqId.current) setDetailLoading(false);
       });
   }, [selectedId]);
+
+  function toggleSwipeNav() {
+    setSwipeNavEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(SWIPE_NAV_PREF_KEY, next ? "on" : "off");
+      return next;
+    });
+  }
 
   async function goNextRandom() {
     if (nextLoading) return;
@@ -297,8 +309,39 @@ export default function VocabPage() {
             {detailLoading && !selected ? (
               <p className="py-12 text-center text-sm text-stone-400">載入詳情...</p>
             ) : selected ? (
-              <SwipeNavigate onSwipeRight={() => void goNextRandom()} disabled={nextLoading}>
+              <SwipeNavigate
+                onSwipeRight={() => void goNextRandom()}
+                disabled={!swipeNavEnabled || nextLoading}
+                hint={
+                  swipeNavEnabled
+                    ? "右滑或按下方按鈕 → 下一個（低分優先）"
+                    : "右滑已關閉；可按下方按鈕前往下一個"
+                }
+              >
                 <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-stone-500">
+                        {swipeNavEnabled ? "瀏覽詳情時可右滑切換下一筆" : "右滑切換已關閉"}
+                      </p>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={swipeNavEnabled}
+                        onClick={toggleSwipeNav}
+                        title={swipeNavEnabled ? "關閉右滑切換下一筆" : "開啟右滑切換下一筆"}
+                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                          swipeNavEnabled ? "bg-[var(--color-primary)]" : "bg-stone-300"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                            swipeNavEnabled ? "translate-x-[18px]" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-stone-500">
                       熟練度{" "}
@@ -486,7 +529,7 @@ function VocabDetail({
                 </span>
               )}
             </div>
-            <p className="text-lg font-semibold text-[var(--color-primary-dark)]">
+            <p className="whitespace-pre-wrap text-lg font-semibold text-[var(--color-primary-dark)]">
               {def.meaning_zh}
             </p>
           </div>

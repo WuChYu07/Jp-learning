@@ -166,8 +166,8 @@ export default function VocabEditModal({
           <textarea
             value={draft.meaning_zh}
             onChange={(e) => setDraft((p) => ({ ...p, meaning_zh: e.target.value }))}
-            rows={2}
-            className="w-full rounded-xl border border-orange-100 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-orange-300"
+            rows={4}
+            className="w-full resize-y rounded-xl border border-orange-100 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-orange-300"
             required
           />
         </label>
