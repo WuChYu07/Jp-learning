@@ -1,5 +1,6 @@
-"""Text-to-speech via Gemini's native audio output, cached in Supabase Storage
-keyed by content hash so the same sentence is only ever synthesized once."""
+"""Text-to-speech via Gemini's native audio output or Google Translate's
+speech endpoint, cached in Supabase Storage keyed by (voice, text) hash so
+the same sentence is only ever synthesized once per voice."""
 
 from __future__ import annotations
 
@@ -7,11 +8,13 @@ import hashlib
 import io
 import logging
 import wave
+from urllib.parse import quote
 
 from fastapi import HTTPException, status
 from google.genai import types
 
 from app.core.config import settings
+from app.core.http_client import create_sync_client
 from app.db.supabase import get_supabase_client
 from app.services.gemini_client import run_with_key_failover
 
@@ -19,6 +22,17 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SAMPLE_RATE = 24000
 _bucket_ready = False
+
+# Sentinel `voice` value selecting Google Translate's TTS instead of Gemini.
+GOOGLE_TRANSLATE_VOICE = "google-translate"
+# translate_tts silently cuts off long input; keep well under its ~200 char limit.
+_GOOGLE_TRANSLATE_CHUNK_LIMIT = 180
+_GOOGLE_TRANSLATE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    ),
+}
 
 # Gemini's prebuilt TTS voices worth surfacing for audition (name, style hint).
 # Full catalog has ~30 voices; this is a curated subset with well-documented styles.
@@ -38,9 +52,9 @@ AVAILABLE_VOICES: list[tuple[str, str]] = [
 ]
 
 
-def _cache_filename(text: str, voice: str) -> str:
+def _cache_filename(text: str, voice: str, ext: str) -> str:
     digest = hashlib.sha256(f"{voice}::{text}".encode("utf-8")).hexdigest()
-    return f"{digest}.wav"
+    return f"{digest}.{ext}"
 
 
 def _sample_rate_from_mime(mime_type: str) -> int:
@@ -63,6 +77,49 @@ def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int) -> bytes:
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm_bytes)
     return buffer.getvalue()
+
+
+def _split_for_translate_tts(text: str) -> list[str]:
+    """Break text into <=180-char chunks on sentence boundaries (。！？) so
+    long sentences still work despite translate_tts's undocumented length cap."""
+    if len(text) <= _GOOGLE_TRANSLATE_CHUNK_LIMIT:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for ch in text:
+        current += ch
+        if ch in "。！？" and len(current) > 0:
+            chunks.append(current)
+            current = ""
+        elif len(current) >= _GOOGLE_TRANSLATE_CHUNK_LIMIT:
+            chunks.append(current)
+            current = ""
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _fetch_google_translate_mp3(text: str) -> bytes:
+    """Fetch speech from Google Translate's (unofficial, undocumented) TTS
+    endpoint — no API key, fast, decent Japanese pronunciation. Since it's not
+    an official API it could change or start rate-limiting without notice;
+    the frontend already falls back to browser TTS if this errors."""
+    parts: list[bytes] = []
+    with create_sync_client(timeout=15) as client:
+        for chunk in _split_for_translate_tts(text):
+            url = (
+                "https://translate.google.com/translate_tts"
+                f"?ie=UTF-8&q={quote(chunk)}&tl=ja&client=tw-ob"
+            )
+            response = client.get(url, headers=_GOOGLE_TRANSLATE_HEADERS)
+            if response.status_code != status.HTTP_200_OK or not response.content:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Google Translate TTS request failed",
+                )
+            parts.append(response.content)
+    return b"".join(parts)
 
 
 def _ensure_bucket(bucket: str) -> None:
@@ -130,23 +187,30 @@ def get_or_create_speech_url(text: str, voice: str | None = None) -> str:
     if not cleaned:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="text is required")
     voice = (voice or settings.GEMINI_TTS_VOICE).strip() or settings.GEMINI_TTS_VOICE
+    is_google_translate = voice == GOOGLE_TRANSLATE_VOICE
+    ext = "mp3" if is_google_translate else "wav"
 
     bucket = settings.TTS_STORAGE_BUCKET
     _ensure_bucket(bucket)
-    filename = _cache_filename(cleaned, voice)
+    filename = _cache_filename(cleaned, voice, ext)
 
     cached = _existing_url(bucket, filename)
     if cached:
         return cached
 
-    wav_bytes = _synthesize_wav(cleaned, voice)
+    audio_bytes = (
+        _fetch_google_translate_mp3(cleaned)
+        if is_google_translate
+        else _synthesize_wav(cleaned, voice)
+    )
+    content_type = "audio/mpeg" if is_google_translate else "audio/wav"
 
     client = get_supabase_client()
     try:
         client.storage.from_(bucket).upload(
             filename,
-            wav_bytes,
-            file_options={"content-type": "audio/wav", "upsert": "true"},
+            audio_bytes,
+            file_options={"content-type": content_type, "upsert": "true"},
         )
     except Exception as exc:
         raise HTTPException(

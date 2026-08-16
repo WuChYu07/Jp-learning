@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import SpeakButton from "../components/SpeakButton";
 import { api, formatUserFacingError } from "../lib/api";
-import { BROWSER_VOICE_OPTION, getPreferredVoice, setPreferredVoice } from "../lib/ttsPrefs";
+import {
+  BROWSER_VOICE_OPTION,
+  GOOGLE_TRANSLATE_VOICE_OPTION,
+  getPreferredVoice,
+  setPreferredVoice,
+} from "../lib/ttsPrefs";
 
 const SAMPLE_TEXT = "週末は友達と映画を見に行くつもりです。";
 const DEFAULT_VOICE = "Kore";
@@ -12,6 +17,12 @@ const BROWSER_OPTION: VoiceOption = {
   name: BROWSER_VOICE_OPTION,
   label: "Windows／瀏覽器預設語音",
   style: "使用你電腦或瀏覽器安裝的語音（不經過 Gemini，免費但音質依裝置而定）",
+};
+
+const GOOGLE_TRANSLATE_OPTION: VoiceOption = {
+  name: GOOGLE_TRANSLATE_VOICE_OPTION,
+  label: "Google 翻譯語音",
+  style: "速度快、發音較準；走非官方 Google 翻譯介面，理論上有可能哪天失效",
 };
 
 export default function SettingsPage() {
@@ -25,6 +36,7 @@ export default function SettingsPage() {
       .listVoices()
       .then((res) =>
         setVoices([
+          GOOGLE_TRANSLATE_OPTION,
           BROWSER_OPTION,
           ...res.voices.map((v) => ({ name: v.name, label: v.name, style: v.style })),
         ]),
