@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import RelationHints from "../components/RelationHints";
 import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import { api, Grammar } from "../lib/api";
+import { interleaveLeeches, requeueAfterFail } from "../lib/leechQueue";
 import { renderFormattedText } from "../lib/textFormat";
 
 const BATCH_SIZE = 10;
@@ -40,6 +41,10 @@ export default function GrammarReviewPage() {
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [lastDelta, setLastDelta] = useState<string | null>(null);
 
+  /** Cards swiped left ("again") this session that haven't been re-rated
+   * "good"/"easy" yet — carried across batches so they keep resurfacing. */
+  const leechesRef = useRef<Grammar[]>([]);
+
   const loadBatch = useCallback((offset: number) => {
     setError("");
     setLoading(true);
@@ -47,7 +52,7 @@ export default function GrammarReviewPage() {
     api
       .dueGrammar(BATCH_SIZE, offset)
       .then((batch) => {
-        setCards(batch.items);
+        setCards(interleaveLeeches(batch.items, leechesRef.current));
         setIndex(0);
         setFlipped(false);
         setHasMore(batch.has_more);
@@ -67,6 +72,7 @@ export default function GrammarReviewPage() {
   async function handleRating(rating: "again" | "hard" | "good" | "easy") {
     if (!current || submitting) return;
     setSubmitting(true);
+    const wasLast = index >= cards.length - 1;
     try {
       const result = await api.submitGrammarReview(current.id, rating);
       const sd = result.score_delta ?? 0;
@@ -89,8 +95,20 @@ export default function GrammarReviewPage() {
         pointsDelta: s.pointsDelta + pd,
       }));
 
+      if (rating === "again") {
+        if (!leechesRef.current.some((c) => c.id === current.id)) {
+          leechesRef.current = [...leechesRef.current, current];
+        }
+        setCards((prev) => requeueAfterFail(prev, index));
+      } else {
+        leechesRef.current = leechesRef.current.filter((c) => c.id !== current.id);
+      }
+
       setFlipped(false);
-      if (index + 1 < cards.length) {
+      if (rating === "again") {
+        if (wasLast) setBatchDone(true);
+        // else: index stays put — the card that shifted into this slot renders next.
+      } else if (index + 1 < cards.length) {
         setIndex(index + 1);
       } else {
         setBatchDone(true);
@@ -177,6 +195,7 @@ export default function GrammarReviewPage() {
             type="button"
             onClick={() => {
               setStats(EMPTY_STATS);
+              leechesRef.current = [];
               loadBatch(0);
             }}
             className="rounded-full bg-stone-100 px-6 py-3 text-sm font-semibold text-stone-700"
@@ -244,7 +263,7 @@ export default function GrammarReviewPage() {
               caption="點我發音"
             />
             {usage?.semantic_concept && (
-              <p className="mt-4 text-base text-stone-500">
+              <p className="mt-4 whitespace-pre-wrap text-base text-stone-500">
                 {renderFormattedText(usage.semantic_concept)}
               </p>
             )}
@@ -252,11 +271,11 @@ export default function GrammarReviewPage() {
         }
         back={
           <>
-            <p className="text-2xl font-semibold text-[var(--color-primary-dark)]">
+            <p className="whitespace-pre-wrap text-2xl font-semibold text-[var(--color-primary-dark)]">
               {renderFormattedText(meaning)}
             </p>
             {usage?.connection_rule && (
-              <p className="mt-4 text-left text-sm text-stone-600">
+              <p className="mt-4 whitespace-pre-wrap text-left text-sm text-stone-600">
                 <span className="font-semibold">接續：</span>
                 {renderFormattedText(usage.connection_rule)}
               </p>
@@ -264,7 +283,7 @@ export default function GrammarReviewPage() {
             {example && (
               <div className="mt-6 space-y-2 text-left text-base text-stone-600">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 font-medium">{example.japanese}</p>
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap font-medium">{example.japanese}</p>
                   <SpeakButton
                     size="sm"
                     text={example.japanese}
@@ -273,9 +292,9 @@ export default function GrammarReviewPage() {
                   />
                 </div>
                 {example.reading && (
-                  <p className="text-sm text-stone-400">{example.reading}</p>
+                  <p className="whitespace-pre-wrap text-sm text-stone-400">{example.reading}</p>
                 )}
-                {example.chinese && <p>{example.chinese}</p>}
+                {example.chinese && <p className="whitespace-pre-wrap">{example.chinese}</p>}
               </div>
             )}
           </>

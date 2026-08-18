@@ -870,7 +870,7 @@ function UsageCard({
               用法 {index + 1}／{total}
             </p>
             {title && (
-              <p className="mt-0.5 text-lg font-bold leading-snug">
+              <p className="mt-0.5 whitespace-pre-wrap text-lg font-bold leading-snug">
                 {renderFormattedText(title)}
               </p>
             )}
@@ -880,7 +880,7 @@ function UsageCard({
 
       <div className={`space-y-3 ${multi ? "p-5 pt-4" : "p-5"}`}>
         {!multi && title && (
-          <p className="text-lg font-bold text-[var(--color-primary-dark)]">
+          <p className="whitespace-pre-wrap text-lg font-bold text-[var(--color-primary-dark)]">
             {renderFormattedText(title)}
           </p>
         )}
@@ -890,7 +890,7 @@ function UsageCard({
             {blocks.map((block, i) => (
               <div
                 key={i}
-                className={`rounded-xl p-4 text-sm font-bold leading-relaxed ring-1 ${MEANING_BLOCK_STYLES[block.variant]}`}
+                className={`whitespace-pre-wrap rounded-xl p-4 text-sm font-bold leading-relaxed ring-1 ${MEANING_BLOCK_STYLES[block.variant]}`}
               >
                 {renderFormattedText(block.text)}
               </div>
@@ -1053,16 +1053,16 @@ function ExampleBlock({
   return (
     <div className="rounded-xl bg-green-50 p-4">
       <div className="flex items-start justify-between gap-2">
-        <p className="kanji-display min-w-0 flex-1 text-base leading-relaxed">
+        <p className="kanji-display min-w-0 flex-1 whitespace-pre-wrap text-base leading-relaxed">
           {renderHighlightedJapanese(example.japanese, exampleMarks(example), grammarPoint)}
         </p>
         <SpeakButton size="sm" text={example.japanese} label="播放例句發音" caption="播例句" />
       </div>
       {example.reading && (
-        <p className="mt-0.5 text-xs text-stone-400">{example.reading}</p>
+        <p className="mt-0.5 whitespace-pre-wrap text-xs text-stone-400">{example.reading}</p>
       )}
       {example.chinese && (
-        <p className="mt-1 text-sm text-stone-600">{example.chinese}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-stone-600">{example.chinese}</p>
       )}
     </div>
   );

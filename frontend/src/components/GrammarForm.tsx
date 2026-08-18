@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { ExampleSentence, Grammar, GrammarWriteInput } from "../lib/api";
+import { autoGrow } from "../lib/autoGrow";
 
 type UsageDraft = {
   semantic_concept: string;
@@ -226,8 +227,12 @@ export default function GrammarForm({
       <label className="block space-y-1">
         <span className="text-xs font-semibold text-stone-500">文法標題</span>
         <textarea
+          ref={autoGrow}
           value={draft.grammar_point}
-          onChange={(e) => setDraft((prev) => ({ ...prev, grammar_point: e.target.value }))}
+          onChange={(e) => {
+            setDraft((prev) => ({ ...prev, grammar_point: e.target.value }));
+            autoGrow(e.currentTarget);
+          }}
           rows={1}
           className="w-full resize-y rounded-xl border border-orange-100 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-orange-300"
           placeholder="例：〜おきに"
@@ -292,8 +297,12 @@ export default function GrammarForm({
                 中文語意標題（反白文字可標記重點）
               </span>
               <textarea
+                ref={autoGrow}
                 value={usage.semantic_concept}
-                onChange={(e) => updateUsage(usageIndex, { semantic_concept: e.target.value })}
+                onChange={(e) => {
+                  updateUsage(usageIndex, { semantic_concept: e.target.value });
+                  autoGrow(e.currentTarget);
+                }}
                 onMouseUp={(e) =>
                   wrapSelectionAsMark(usageIndex, "semantic_concept", e.currentTarget)
                 }
@@ -311,8 +320,12 @@ export default function GrammarForm({
                 接續規則（多行可用 Enter；反白文字可標記重點；用 ~~文字~~ 畫刪除線標示排除的用法）
               </span>
               <textarea
+                ref={autoGrow}
                 value={usage.connection_rule}
-                onChange={(e) => updateUsage(usageIndex, { connection_rule: e.target.value })}
+                onChange={(e) => {
+                  updateUsage(usageIndex, { connection_rule: e.target.value });
+                  autoGrow(e.currentTarget);
+                }}
                 onMouseUp={(e) =>
                   wrapSelectionAsMark(usageIndex, "connection_rule", e.currentTarget)
                 }
@@ -320,7 +333,7 @@ export default function GrammarForm({
                   wrapSelectionAsMark(usageIndex, "connection_rule", e.currentTarget)
                 }
                 rows={3}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
+                className="w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder={"* V 普通形 + かな\n* なA / N + ~~だ~~／である"}
               />
             </label>
@@ -330,12 +343,16 @@ export default function GrammarForm({
                 中文說明（反白文字可標記重點）
               </span>
               <textarea
+                ref={autoGrow}
                 value={usage.meaning_zh}
-                onChange={(e) => updateUsage(usageIndex, { meaning_zh: e.target.value })}
+                onChange={(e) => {
+                  updateUsage(usageIndex, { meaning_zh: e.target.value });
+                  autoGrow(e.currentTarget);
+                }}
                 onMouseUp={(e) => wrapSelectionAsMark(usageIndex, "meaning_zh", e.currentTarget)}
                 onKeyUp={(e) => wrapSelectionAsMark(usageIndex, "meaning_zh", e.currentTarget)}
                 rows={2}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
+                className="w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
                 placeholder="說明這個用法的意思"
               />
             </label>
@@ -363,10 +380,12 @@ export default function GrammarForm({
                   className="space-y-2 rounded-lg bg-white p-3 ring-1 ring-stone-100"
                 >
                   <textarea
+                    ref={autoGrow}
                     value={ex.japanese}
-                    onChange={(e) =>
-                      updateExample(usageIndex, exIndex, { japanese: e.target.value })
-                    }
+                    onChange={(e) => {
+                      updateExample(usageIndex, exIndex, { japanese: e.target.value });
+                      autoGrow(e.currentTarget);
+                    }}
                     onMouseUp={(e) =>
                       markSelectionAsHighlight(usageIndex, exIndex, e.currentTarget, marks)
                     }
@@ -402,19 +421,23 @@ export default function GrammarForm({
                     )}
                   </div>
                   <textarea
+                    ref={autoGrow}
                     value={ex.reading || ""}
-                    onChange={(e) =>
-                      updateExample(usageIndex, exIndex, { reading: e.target.value })
-                    }
+                    onChange={(e) => {
+                      updateExample(usageIndex, exIndex, { reading: e.target.value });
+                      autoGrow(e.currentTarget);
+                    }}
                     rows={1}
                     className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="讀音（可選）"
                   />
                   <textarea
+                    ref={autoGrow}
                     value={ex.chinese || ""}
-                    onChange={(e) =>
-                      updateExample(usageIndex, exIndex, { chinese: e.target.value })
-                    }
+                    onChange={(e) => {
+                      updateExample(usageIndex, exIndex, { chinese: e.target.value });
+                      autoGrow(e.currentTarget);
+                    }}
                     rows={1}
                     className="w-full resize-y rounded-md border border-stone-200 px-2 py-1.5 text-sm"
                     placeholder="中文翻譯（可選）"

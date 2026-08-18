@@ -4,6 +4,7 @@ import SpeakButton from "../components/SpeakButton";
 import SwipeFlashcard from "../components/SwipeFlashcard";
 import RelationHints from "../components/RelationHints";
 import { api, Vocabulary } from "../lib/api";
+import { interleaveLeeches, requeueAfterFail } from "../lib/leechQueue";
 import { vocabDisplay } from "../lib/vocabDisplay";
 
 const BATCH_SIZE = 10;
@@ -42,6 +43,9 @@ export default function VocabReviewPage() {
   const [lastDelta, setLastDelta] = useState<string | null>(null);
 
   const currentOffset = useRef(0);
+  /** Cards swiped left ("again") this session that haven't been re-rated
+   * "good"/"easy" yet — carried across batches so they keep resurfacing. */
+  const leechesRef = useRef<Vocabulary[]>([]);
 
   const loadBatch = useCallback((offset: number) => {
     setError("");
@@ -52,7 +56,7 @@ export default function VocabReviewPage() {
     api
       .dueVocab(BATCH_SIZE, offset)
       .then((batch) => {
-        setCards(batch.items);
+        setCards(interleaveLeeches(batch.items, leechesRef.current));
         setIndex(0);
         setFlipped(false);
         setHasMore(batch.has_more);
@@ -72,6 +76,7 @@ export default function VocabReviewPage() {
   async function handleRating(rating: "again" | "hard" | "good" | "easy") {
     if (!current || submitting) return;
     setSubmitting(true);
+    const wasLast = index >= cards.length - 1;
     try {
       const result = await api.submitReview(current.id, rating);
       const sd = result.score_delta ?? 0;
@@ -94,8 +99,20 @@ export default function VocabReviewPage() {
         pointsDelta: s.pointsDelta + pd,
       }));
 
+      if (rating === "again") {
+        if (!leechesRef.current.some((c) => c.id === current.id)) {
+          leechesRef.current = [...leechesRef.current, current];
+        }
+        setCards((prev) => requeueAfterFail(prev, index));
+      } else {
+        leechesRef.current = leechesRef.current.filter((c) => c.id !== current.id);
+      }
+
       setFlipped(false);
-      if (index + 1 < cards.length) {
+      if (rating === "again") {
+        if (wasLast) setBatchDone(true);
+        // else: index stays put — the card that shifted into this slot renders next.
+      } else if (index + 1 < cards.length) {
         setIndex(index + 1);
       } else {
         setBatchDone(true);
@@ -113,6 +130,7 @@ export default function VocabReviewPage() {
 
   function handleRestart() {
     setStats(EMPTY_STATS);
+    leechesRef.current = [];
     loadBatch(0);
   }
 
@@ -277,11 +295,13 @@ export default function VocabReviewPage() {
                 {pos}
               </span>
             )}
-            <p className="text-4xl font-semibold text-[var(--color-primary-dark)]">{meaning}</p>
+            <p className="whitespace-pre-wrap text-4xl font-semibold text-[var(--color-primary-dark)]">
+              {meaning}
+            </p>
             {example && (
               <div className="mt-8 space-y-2 text-left text-base text-stone-600">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 font-medium">{example.japanese}</p>
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap font-medium">{example.japanese}</p>
                   <SpeakButton
                     size="sm"
                     text={example.japanese}
@@ -290,9 +310,9 @@ export default function VocabReviewPage() {
                   />
                 </div>
                 {example.reading && (
-                  <p className="text-sm text-stone-400">{example.reading}</p>
+                  <p className="whitespace-pre-wrap text-sm text-stone-400">{example.reading}</p>
                 )}
-                {example.chinese && <p>{example.chinese}</p>}
+                {example.chinese && <p className="whitespace-pre-wrap">{example.chinese}</p>}
               </div>
             )}
           </>

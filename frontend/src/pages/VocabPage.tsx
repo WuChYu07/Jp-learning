@@ -545,11 +545,13 @@ function VocabDetail({
                     key={`${ex.japanese}-${i}`}
                     className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-700"
                   >
-                    <p className="font-medium">{ex.japanese}</p>
+                    <p className="whitespace-pre-wrap font-medium">{ex.japanese}</p>
                     {ex.reading && (
-                      <p className="mt-0.5 text-xs text-stone-400">{ex.reading}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-xs text-stone-400">{ex.reading}</p>
                     )}
-                    {ex.chinese && <p className="mt-1 text-stone-600">{ex.chinese}</p>}
+                    {ex.chinese && (
+                      <p className="mt-1 whitespace-pre-wrap text-stone-600">{ex.chinese}</p>
+                    )}
                   </li>
                 ))}
               </ul>

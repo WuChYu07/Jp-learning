@@ -337,13 +337,20 @@ class GrammarService:
 
         due_rows = (
             self.db.table("user_grammar_progress")
-            .select("grammar_id")
+            .select("grammar_id, next_review_date")
             .eq("user_id", user_id)
             .lte("next_review_date", now_iso)
             .order("next_review_date")
             .execute()
         ).data or []
         due_ids = [r["grammar_id"] for r in due_rows]
+        due_overdue_hours = {
+            r["grammar_id"]: (
+                now - datetime.fromisoformat(str(r["next_review_date"]).replace("Z", "+00:00"))
+            ).total_seconds()
+            / 3600
+            for r in due_rows
+        }
 
         all_progress = (
             self.db.table("user_grammar_progress")
@@ -376,6 +383,7 @@ class GrammarService:
             score_by_id=score_map,
             seed=daily_seed(user_id, "grammar"),
             cooldown_ids=cooldown_ids,
+            due_overdue_hours=due_overdue_hours,
         )
         total_available = len(combined)
         page = combined[offset : offset + limit]

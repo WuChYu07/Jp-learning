@@ -44,6 +44,33 @@ def weighted_order(
     return ordered
 
 
+DUE_OVERDUE_CAP_HOURS = 14 * 24  # beyond ~2 weeks overdue, treat as equally "very overdue"
+
+
+def overdue_weighted_order(
+    ids: list[str],
+    overdue_hours_by_id: dict[str, float],
+    seed: int,
+    cap_hours: float = DUE_OVERDUE_CAP_HOURS,
+) -> list[str]:
+    """Order due ids with a bias toward the most overdue (e.g. a card that was
+    marked "again" and never revisited), so it's likely to resurface near the
+    start of the next session rather than being buried in a long due backlog.
+    Capped so a card neglected for months doesn't dominate every session forever.
+    """
+    if not ids:
+        return []
+    rng = random.Random(seed)
+    remaining = list(ids)
+    ordered: list[str] = []
+    while remaining:
+        weights = [min(overdue_hours_by_id.get(vid, 0.0), cap_hours) + 1.0 for vid in remaining]
+        pick = rng.choices(remaining, weights=weights, k=1)[0]
+        ordered.append(pick)
+        remaining.remove(pick)
+    return ordered
+
+
 def build_mixed_review_queue(
     *,
     due_ids: list[str],
@@ -54,6 +81,7 @@ def build_mixed_review_queue(
     new_per_block: int = 4,
     low_per_block: int = 2,
     cooldown_ids: set[str] | None = None,
+    due_overdue_hours: dict[str, float] | None = None,
 ) -> list[str]:
     """
     Build a day-stable mixed deck.
@@ -63,8 +91,15 @@ def build_mixed_review_queue(
     `cooldown_ids` (e.g. reviewed in the last 24h) are excluded from the
     low-score pool so the same worst-scoring words don't get pulled back in
     on the very next session before their score has a chance to move.
+    `due_overdue_hours`, when given, biases the due block toward the most
+    overdue cards (e.g. one marked "again" and not revisited) instead of a
+    plain shuffle, so a failed card is likely to resurface early next session.
     """
-    due = seeded_shuffle(due_ids, seed)
+    due = (
+        overdue_weighted_order(due_ids, due_overdue_hours, seed)
+        if due_overdue_hours
+        else seeded_shuffle(due_ids, seed)
+    )
     new = seeded_shuffle(new_ids, seed + 1)
     excluded = set(due_ids) | (cooldown_ids or set())
     early_pool = [vid for vid in score_by_id if vid not in excluded]
