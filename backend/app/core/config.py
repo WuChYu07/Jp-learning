@@ -90,6 +90,14 @@ class Settings(BaseSettings):
     # Endpoint refuses all requests while empty — never leave it open on a public deploy.
     SCHEDULED_SYNC_TOKEN: str = ""
 
+    # Site-wide login gate (independent of AUTH_ENABLED/Supabase Auth) — a single
+    # shared credential protecting the whole /api/v1 surface from anyone who finds
+    # the URL. bcrypt hash, never the plaintext password. Login always fails while
+    # empty, so /api/v1 fails closed rather than open if this isn't configured.
+    ADMIN_PASSWORD_HASH: str = ""
+    # HMAC signing key for the login token. Generate with secrets.token_urlsafe(32).
+    SITE_AUTH_SECRET: str = ""
+
     @field_validator("SUPABASE_URL")
     @classmethod
     def normalize_supabase_url(cls, value: str) -> str:

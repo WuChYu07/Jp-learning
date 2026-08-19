@@ -580,11 +580,22 @@ async function request<T>(
     headers.set("Content-Type", "application/json");
   }
   const token = localStorage.getItem("access_token");
-  // Token optional — backend AUTH_ENABLED=false skips JWT verification
+  // AUTH_ENABLED=false skips per-user JWT verification, but every /api/v1
+  // route still sits behind the site-wide login gate (see /auth/login) —
+  // this same header carries that gate's token too.
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
   const res = await fetchWithRetry(`${API_BASE}${path}`, { ...init, headers }, transportOpts);
+  // A 401 from the login call itself just means "wrong password" — let it fall
+  // through to the normal error path below instead of bouncing back to /login.
+  if (res.status === 401 && path !== "/api/v1/auth/login") {
+    localStorage.removeItem("access_token");
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("請重新登入");
+  }
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(formatApiError(detail, res.statusText));
@@ -596,6 +607,11 @@ async function request<T>(
 }
 
 export const api = {
+  login: (password: string) =>
+    request<{ token: string }>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
   dashboardStats: () => request<DashboardStats>("/api/v1/dashboard/stats"),
   dashboardTrends: (days = 14) =>
     request<DashboardTrends>(`/api/v1/dashboard/trends?days=${days}`),

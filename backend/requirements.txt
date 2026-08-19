@@ -8,9 +8,9 @@ pydantic>=2.9.0,<3.0.0
 pydantic-settings>=2.6.0,<3.0.0
 python-dotenv>=1.0.0,<2.0.0
 
-# Auth (optional — only if you verify JWTs locally instead of via Auth API)
-# PyJWT>=2.9.0,<3.0.0
-# cryptography>=43.0.0,<44.0.0
+# Auth
+PyJWT>=2.9.0,<3.0.0
+bcrypt>=4.2.0,<5.0.0
 
 # Database (Supabase)
 supabase>=2.10.0,<3.0.0

@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
 from app.core.security import verify_access_token
+from app.core.site_auth import verify_token as verify_site_token
 from app.services.owner_service import SINGLETON_OWNER_ID
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -41,6 +42,20 @@ async def get_current_user_id(
             detail="Authentication required",
         )
     return user_id
+
+
+async def require_site_auth(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+) -> None:
+    """Site-wide login gate — one shared password, unrelated to AUTH_ENABLED/
+    per-user identity above. Applied at router-include level (see main.py) so
+    it covers every /api/v1 route uniformly, including ones that don't declare
+    any user-identity dependency of their own."""
+    if credentials is None or not verify_site_token(credentials.credentials):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
 
 
 async def get_optional_user_id(
