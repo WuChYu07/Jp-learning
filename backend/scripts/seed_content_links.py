@@ -24,8 +24,8 @@ from app.models.schemas.links import (  # noqa: E402
     LinkEntityType,
     LinkRelationType,
 )
-from app.services.curriculum.grammar_kb import normalize_pattern  # noqa: E402
-from app.services.curriculum.grammar_teacher_kb import TEACHER_GRAMMAR  # noqa: E402
+from app.services.grammar_kb import normalize_pattern  # noqa: E402
+from app.services.grammar_teacher_kb import TEACHER_GRAMMAR  # noqa: E402
 from app.services.link_service import link_service  # noqa: E402
 
 # Patterns often referenced in teacher notes (longest first for matching)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.services.curriculum.grammar_kb import normalize_pattern
+from curriculum.grammar_kb import normalize_pattern
 
 
 @dataclass(frozen=True)

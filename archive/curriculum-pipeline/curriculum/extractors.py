@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from app.services.curriculum.grammar_extractor import GrammarCard, extract_grammar_cards
+from curriculum.grammar_extractor import GrammarCard, extract_grammar_cards
 
 _VOCAB_LINE = re.compile(
     r"^([ぁ-んァ-ヶーa-zA-Z0-9（）()・]+)\s+(\S+|ー)\s+(.+)$"

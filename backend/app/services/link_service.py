@@ -266,7 +266,7 @@ class LinkService:
 
     def find_grammar_by_pattern(self, pattern: str) -> dict | None:
         """Resolve a grammar_point string to a DB row via normalize + fuzzy match."""
-        from app.services.curriculum.grammar_kb import normalize_pattern
+        from app.services.grammar_kb import normalize_pattern
 
         key = normalize_pattern(pattern)
         result = (

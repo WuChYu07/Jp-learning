@@ -14,10 +14,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.curriculum.csv_io import read_csv, write_csv
-from app.services.curriculum.enricher import enrich_grammar_row
-from app.services.curriculum.extractors import GrammarRawRow
-from app.services.curriculum.grammar_kb import GRAMMAR_KB, lookup_grammar, normalize_pattern
+from curriculum.csv_io import read_csv, write_csv
+from curriculum.enricher import enrich_grammar_row
+from curriculum.extractors import GrammarRawRow
+from app.services.grammar_kb import GRAMMAR_KB, lookup_grammar, normalize_pattern
 
 EXTRACTED = PROJECT_ROOT / "data" / "extracted"
 CURATED = PROJECT_ROOT / "data" / "curated"

@@ -19,11 +19,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.curriculum.csv_io import read_csv, write_csv
-from app.services.curriculum.enricher import GrammarCuratedRow
-from app.services.curriculum.extractors import GrammarRawRow
-from app.services.curriculum.grammar_teacher_agent import review_all_rows
-from app.services.curriculum.pdf_usage_extractor import build_pdf_usage_index
+from curriculum.csv_io import read_csv, write_csv
+from curriculum.enricher import GrammarCuratedRow
+from curriculum.extractors import GrammarRawRow
+from curriculum.grammar_teacher_agent import review_all_rows
+from curriculum.pdf_usage_extractor import build_pdf_usage_index
 
 DATA = PROJECT_ROOT / "data"
 EXTRACTED = DATA / "extracted"

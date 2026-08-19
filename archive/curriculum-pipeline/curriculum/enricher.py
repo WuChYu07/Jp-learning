@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app.services.curriculum.extractors import GrammarRawRow, VocabRawRow
-from app.services.curriculum.grammar_kb import lookup_grammar
+from curriculum.extractors import GrammarRawRow, VocabRawRow
+from app.services.grammar_kb import lookup_grammar
 
 # Common N5 surface forms seen in beginner materials
 _N5_HINTS = {

@@ -5,11 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 
-from app.services.curriculum.enricher import GrammarCuratedRow
-from app.services.curriculum.extractors import GrammarRawRow
-from app.services.curriculum.grammar_kb import lookup_grammar
-from app.services.curriculum.grammar_teacher_kb import TeacherGrammarEntry, lookup_teacher
-from app.services.curriculum.pdf_usage_extractor import PageUsageNotes, format_usage_sections
+from curriculum.enricher import GrammarCuratedRow
+from curriculum.extractors import GrammarRawRow
+from app.services.grammar_kb import lookup_grammar
+from app.services.grammar_teacher_kb import TeacherGrammarEntry, lookup_teacher
+from curriculum.pdf_usage_extractor import PageUsageNotes, format_usage_sections
 
 _TEMPLATE_EXAMPLE = re.compile(r"(の例文です|を使います)。?$")
 _HAS_JP = re.compile(r"[ぁ-んァ-ヶ一-龯]")
@@ -255,7 +255,7 @@ def review_all_rows(
         page_usage = None
         if raw and raw.source_page.isdigit():
             page = int(raw.source_page)
-            from app.services.curriculum.pdf_usage_extractor import usage_for_page
+            from curriculum.pdf_usage_extractor import usage_for_page
 
             page_usage = usage_for_page(pdf_usage_index, page, radius=0)
 

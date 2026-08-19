@@ -1,7 +1,11 @@
 """Run full curriculum data pipeline: extract → enrich.
 
-Usage (from backend/):
-    python scripts/run_data_pipeline.py [--clear-db]
+Archived 2026-08-19 alongside the agents it drives — see README.md in this
+folder. --clear-db still shells out to the live backend's db_cleanup.py, so
+that one needs backend/ at the given path to exist as checked out.
+
+Usage (from archive/curriculum-pipeline/):
+    python run_data_pipeline.py [--clear-db]
 """
 
 from __future__ import annotations
@@ -11,7 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
+BACKEND_ROOT = PIPELINE_ROOT.parent.parent / "backend"
 
 
 def main() -> None:
@@ -28,17 +33,17 @@ def main() -> None:
         subprocess.run([sys.executable, str(BACKEND_ROOT / "scripts" / "db_cleanup.py")], check=True)
 
     print("=== Agent 1: PDF → raw CSV ===")
-    subprocess.run([sys.executable, str(BACKEND_ROOT / "scripts" / "agents" / "agent1_extract_to_csv.py")], check=True)
+    subprocess.run([sys.executable, str(PIPELINE_ROOT / "agents" / "agent1_extract_to_csv.py")], check=True)
 
     print("=== Agent 2: enrich CSV ===")
-    subprocess.run([sys.executable, str(BACKEND_ROOT / "scripts" / "agents" / "agent2_enrich_curriculum.py")], check=True)
+    subprocess.run([sys.executable, str(PIPELINE_ROOT / "agents" / "agent2_enrich_curriculum.py")], check=True)
 
     print("=== Agent 3: fill grammar index gaps ===")
-    subprocess.run([sys.executable, str(BACKEND_ROOT / "scripts" / "agents" / "agent3_fill_grammar_gaps.py")], check=True)
+    subprocess.run([sys.executable, str(PIPELINE_ROOT / "agents" / "agent3_fill_grammar_gaps.py")], check=True)
 
     print("=== Agent 4: grammar teacher review ===")
     subprocess.run(
-        [sys.executable, str(BACKEND_ROOT / "scripts" / "agents" / "agent4_grammar_teacher.py")],
+        [sys.executable, str(PIPELINE_ROOT / "agents" / "agent4_grammar_teacher.py")],
         check=True,
     )
 

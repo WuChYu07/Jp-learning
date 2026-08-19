@@ -142,7 +142,7 @@ jp-learning/
 │   ├── src/
 │   │   ├── components/       # 字卡、關聯圖、編輯小視窗…
 │   │   ├── pages/            # Dashboard, Vocab, Review, Grammar, Quiz, Map, Upload
-│   │   └── lib/              # api.ts, supabase, vocabDisplay
+│   │   └── lib/              # api.ts, vocabDisplay
 │   ├── vercel.json
 │   └── package.json
 ├── render.yaml               # （可選）Render Blueprint
@@ -152,7 +152,9 @@ jp-learning/
 ├── docs/
 │   ├── deploy-a.md           # 雲端從頭部署
 │   ├── roadmap.md            # 待辦與手機策略
-│   ├── performance.md        # 效能問題日誌
+│   └── performance.md        # 效能問題日誌
+├── archive/
+│   ├── curriculum-pipeline/  # 離線內容生成 pipeline（初期資料建置用，非 runtime）
 │   └── ui-blueprints/        # 早期設計稿
 └── README.md
 ```

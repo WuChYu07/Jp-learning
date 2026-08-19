@@ -13,8 +13,8 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.curriculum.csv_io import write_csv
-from app.services.curriculum.extractors import extract_grammar_rows_from_pdf, extract_vocabulary_rows
+from curriculum.csv_io import write_csv
+from curriculum.extractors import extract_grammar_rows_from_pdf, extract_vocabulary_rows
 from app.services.hash_service import extract_pdf_text
 
 DATA = PROJECT_ROOT / "data"

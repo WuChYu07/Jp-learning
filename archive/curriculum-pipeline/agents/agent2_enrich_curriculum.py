@@ -13,8 +13,8 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.curriculum.csv_io import read_csv_as_dicts, write_csv
-from app.services.curriculum.enricher import (
+from curriculum.csv_io import read_csv_as_dicts, write_csv
+from curriculum.enricher import (
     GrammarCuratedRow,
     GrammarRawRow,
     VocabCuratedRow,
