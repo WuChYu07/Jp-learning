@@ -578,6 +578,7 @@ class IngestionService:
                             "source_content_hash": item.source_content_hash,
                             "block_ids": item.block_ids or [],
                             "notion_page_id": item.notion_page_id,
+                            "notion_block_id": item.notion_block_id,
                             "ingestion_id": str(ingestion_id),
                         }
                     ).eq("id", str(grammar_id)).execute()
@@ -627,6 +628,7 @@ class IngestionService:
                             "source_content_hash": item.source_content_hash,
                             "block_ids": item.block_ids or [],
                             "notion_page_id": item.notion_page_id,
+                            "notion_block_id": item.notion_block_id,
                             "ingestion_id": str(ingestion_id),
                         }
                     ).eq("id", str(grammar_id)).execute()
