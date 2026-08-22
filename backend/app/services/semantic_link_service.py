@@ -154,6 +154,7 @@ class SemanticLinkService:
                 and existing_row
                 and existing_row.get("content_hash") == text_hash
                 and existing_row.get("embedding")
+                and existing_row.get("model") == settings.GEMINI_EMBEDDING_MODEL
             ):
                 vectors.append(self._parse_vector(existing_row["embedding"]))
                 continue
@@ -190,28 +191,47 @@ class SemanticLinkService:
                 "note_zh": "中文意思完全相同",
             }
 
-        best_by_target: dict[str, float] = {}
-        matches_considered = 0
-        for vector in vectors:
-            for match in self._match_neighbors(entity_type, entity_id, vector):
-                matches_considered += 1
-                target_id = str(match["entity_id"])
-                sim = float(match.get("similarity") or 0.0)
-                if target_id not in best_by_target or sim > best_by_target[target_id]:
-                    best_by_target[target_id] = sim
-
         strict_threshold = settings.EMBEDDING_SIMILARITY_THRESHOLD
         related_threshold = settings.EMBEDDING_RELATED_THRESHOLD
         gap = settings.EMBEDDING_MAX_SCORE_GAP
 
+        # Gap-filtering runs per sense, not across the whole entity: each
+        # sense (definition/usage) can legitimately point to a different
+        # target entity, e.g. a word with two meanings has one synonym per
+        # meaning. Filtering globally would let a strong match on one sense
+        # silently knock out an equally strong match on another sense.
+        best_by_target: dict[str, float] = {}
+        matches_considered = 0
+        for vector in vectors:
+            sense_best_by_target: dict[str, float] = {}
+            for match in self._match_neighbors(entity_type, entity_id, vector):
+                matches_considered += 1
+                target_id = str(match["entity_id"])
+                sim = float(match.get("similarity") or 0.0)
+                if target_id not in sense_best_by_target or sim > sense_best_by_target[target_id]:
+                    sense_best_by_target[target_id] = sim
+
+            sense_strict = {
+                tid: sim for tid, sim in sense_best_by_target.items() if sim >= strict_threshold
+            }
+            if sense_strict:
+                best_strict = max(sense_strict.values())
+                sense_strict = {
+                    tid: sim for tid, sim in sense_strict.items() if best_strict - sim <= gap
+                }
+            sense_related = {
+                tid: sim
+                for tid, sim in sense_best_by_target.items()
+                if related_threshold <= sim < strict_threshold
+            }
+
+            for tid, sim in {**sense_strict, **sense_related}.items():
+                if tid not in best_by_target or sim > best_by_target[tid]:
+                    best_by_target[tid] = sim
+
         strict_matches = {
             tid: sim for tid, sim in best_by_target.items() if sim >= strict_threshold
         }
-        if strict_matches:
-            best_strict = max(strict_matches.values())
-            strict_matches = {
-                tid: sim for tid, sim in strict_matches.items() if best_strict - sim <= gap
-            }
         related_matches = {
             tid: sim
             for tid, sim in best_by_target.items()
@@ -301,8 +321,16 @@ class SemanticLinkService:
         table = "grammar_usages" if entity_type == LinkEntityType.GRAMMAR else "vocabulary_definitions"
         id_column = "grammar_id" if entity_type == LinkEntityType.GRAMMAR else "vocabulary_id"
 
+        # meaning_zh isn't pre-normalized in the DB, so match both the raw
+        # casing and the lowercased form we compare against below.
+        candidates = list(normalized_targets) + [m.upper() for m in normalized_targets]
         try:
-            rows = self.db.table(table).select(f"{id_column}, meaning_zh").execute().data or []
+            rows = (
+                self.db.table(table)
+                .select(f"{id_column}, meaning_zh")
+                .in_("meaning_zh", candidates)
+                .execute()
+            ).data or []
         except Exception:
             logger.warning("exact meaning-match lookup failed for %s", table)
             return set()

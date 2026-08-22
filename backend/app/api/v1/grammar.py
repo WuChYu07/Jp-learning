@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_effective_user_id
@@ -12,6 +12,7 @@ from app.services.grammar_enrichment_service import grammar_enrichment_service
 from app.services.grammar_service import GrammarReviewBatch, grammar_service
 from app.services.link_service import link_service
 from app.services.link_suggestion_service import link_suggestion_service
+from app.services.semantic_link_service import semantic_link_service
 
 router = APIRouter()
 
@@ -49,8 +50,12 @@ def list_grammar(
 
 
 @router.post("", response_model=GrammarOut, status_code=status.HTTP_201_CREATED)
-def create_grammar(payload: GrammarWriteInput) -> GrammarOut:
-    return grammar_service.create_grammar(payload)
+def create_grammar(payload: GrammarWriteInput, background_tasks: BackgroundTasks) -> GrammarOut:
+    result = grammar_service.create_grammar(payload)
+    background_tasks.add_task(
+        semantic_link_service.sync_entity_safe, LinkEntityType.GRAMMAR, result.id
+    )
+    return result
 
 
 @router.get("/review/due", response_model=GrammarReviewBatchResponse)
@@ -85,8 +90,16 @@ def get_grammar(grammar_id: UUID) -> GrammarOut:
 
 
 @router.put("/{grammar_id}", response_model=GrammarOut)
-def update_grammar(grammar_id: UUID, payload: GrammarWriteInput) -> GrammarOut:
-    return grammar_service.update_grammar(grammar_id, payload)
+def update_grammar(
+    grammar_id: UUID,
+    payload: GrammarWriteInput,
+    background_tasks: BackgroundTasks,
+) -> GrammarOut:
+    result = grammar_service.update_grammar(grammar_id, payload)
+    background_tasks.add_task(
+        semantic_link_service.sync_entity_safe, LinkEntityType.GRAMMAR, grammar_id
+    )
+    return result
 
 
 @router.delete("/{grammar_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -132,6 +145,4 @@ def suggest_grammar_links(grammar_id: UUID) -> SuggestLinksResponse:
 @router.post("/{grammar_id}/sync-semantic-links")
 def sync_grammar_semantic_links(grammar_id: UUID) -> dict:
     grammar_service.get_grammar(grammar_id)
-    from app.services.semantic_link_service import semantic_link_service
-
     return semantic_link_service.sync_grammar(grammar_id, force=True)

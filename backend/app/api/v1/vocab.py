@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_effective_user_id
@@ -9,6 +9,7 @@ from app.models.schemas.common import JlptLevel
 from app.models.schemas.links import LinkEntityType, RelationGraphOut
 from app.models.schemas.vocab import ReviewScoreOut, VocabularyOut, VocabularySummary, VocabularyWriteInput
 from app.services.link_service import link_service
+from app.services.semantic_link_service import semantic_link_service
 from app.services.vocab_enrichment_service import vocab_enrichment_service
 from app.services.vocab_service import vocab_service
 
@@ -93,8 +94,6 @@ def get_vocab_relations(
 @router.post("/{vocabulary_id}/sync-semantic-links")
 def sync_vocab_semantic_links(vocabulary_id: UUID) -> dict:
     vocab_service.get_vocab(vocabulary_id)
-    from app.services.semantic_link_service import semantic_link_service
-
     return semantic_link_service.sync_vocabulary(vocabulary_id, force=True)
 
 
@@ -105,8 +104,16 @@ def ai_enrich_vocabulary(vocabulary_id: UUID) -> VocabularyOut:
 
 
 @router.put("/{vocabulary_id}", response_model=VocabularyOut)
-def update_vocabulary(vocabulary_id: UUID, payload: VocabularyWriteInput) -> VocabularyOut:
-    return vocab_service.update_vocab(vocabulary_id, payload)
+def update_vocabulary(
+    vocabulary_id: UUID,
+    payload: VocabularyWriteInput,
+    background_tasks: BackgroundTasks,
+) -> VocabularyOut:
+    result = vocab_service.update_vocab(vocabulary_id, payload)
+    background_tasks.add_task(
+        semantic_link_service.sync_entity_safe, LinkEntityType.VOCABULARY, vocabulary_id
+    )
+    return result
 
 
 @router.get("/{vocabulary_id}", response_model=VocabularyOut)
