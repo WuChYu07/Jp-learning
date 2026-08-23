@@ -598,10 +598,7 @@ def _parse_example_cell(raw: str) -> list[ExampleSentence]:
 
 def _row_to_vocab(row: list[str]) -> VocabularyItemInput | None:
     """Map Notion 5-col table: 發音 | 單字 | 中文 | 例句 | 補充."""
-    cells = [ (c or "").strip() for c in row ]
-    # Drop trailing empty cells but keep positional alignment for first 5
-    while cells and not cells[-1]:
-        cells.pop()
+    cells = [(c or "").strip() for c in row]
     if len(cells) < 3:
         # Fallback: join and try legacy line regex
         joined = " ".join(c for c in cells if c)
@@ -612,7 +609,7 @@ def _row_to_vocab(row: list[str]) -> VocabularyItemInput | None:
     reading = cells[0]
     word_token = cells[1]
     meaning_zh = cells[2]
-    if not reading or not meaning_zh:
+    if not reading:
         return None
 
     word = reading if word_token in {"ー", "-", "－", ""} else word_token
