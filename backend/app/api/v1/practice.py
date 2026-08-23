@@ -25,6 +25,7 @@ PracticeTopic = Literal["daily", "academic", "travel", "work", "random"]
 class PracticeSessionRequest(BaseModel):
     mode: PracticeMode = "speak"
     topic: PracticeTopic = "random"
+    grammar_id: str | None = None
 
 
 @router.post("/session", response_model=PracticePromptOut)
@@ -36,6 +37,7 @@ def create_practice_session(
         user_id=user_id,
         mode=body.mode,
         topic=body.topic,
+        grammar_id=body.grammar_id,
     )
 
 

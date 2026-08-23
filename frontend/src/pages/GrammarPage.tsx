@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
 import GrammarRelationSection from "../components/GrammarRelationSection";
@@ -69,6 +69,7 @@ const USAGE_ACCENTS = [
 
 export default function GrammarPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState<GrammarSummary[]>([]);
   const [selected, setSelected] = useState<Grammar | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -532,6 +533,21 @@ export default function GrammarPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate("/practice", {
+                        state: {
+                          mode: "hint_translate",
+                          grammarId: selected.id,
+                          grammarPoint: selected.grammar_point,
+                        },
+                      })
+                    }
+                    className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    AI 練習
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleAiExplain()}

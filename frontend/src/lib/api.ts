@@ -215,6 +215,7 @@ export type PracticePrompt = {
   prompt_ja?: string | null;
   hints: PracticeHint[];
   daily_ai_limit_reached?: boolean;
+  forced_grammar?: string | null;
 };
 
 export type PracticeGradeResult = {
@@ -720,6 +721,11 @@ export const api = {
       `/api/v1/grammar/${id}/ai-explain?dry_run=${dryRun ? "true" : "false"}`,
       { method: "POST" },
     ),
+  addGrammarExampleFromPractice: (id: string, japanese: string, chinese?: string | null) =>
+    request<Grammar>(`/api/v1/grammar/${id}/examples/from-practice`, {
+      method: "POST",
+      body: JSON.stringify({ japanese, chinese: chinese ?? null }),
+    }),
 
   // ── Quiz ──
   quiz4Choice: (count = 10) =>
@@ -982,10 +988,11 @@ export const api = {
   practiceSession: (
     mode: "speak" | "hint_translate",
     topic: "daily" | "academic" | "travel" | "work" | "random" = "random",
+    grammarId?: string,
   ) =>
     request<PracticePrompt>("/api/v1/practice/session", {
       method: "POST",
-      body: JSON.stringify({ mode, topic }),
+      body: JSON.stringify({ mode, topic, grammar_id: grammarId ?? null }),
     }),
   practiceGrade: (payload: {
     mode: "speak" | "hint_translate" | string;

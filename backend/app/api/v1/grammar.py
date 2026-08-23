@@ -36,6 +36,11 @@ class GrammarReviewSubmitRequest(BaseModel):
     rating: str = Field(description="again | hard | good | easy")
 
 
+class AddExampleFromPracticeRequest(BaseModel):
+    japanese: str
+    chinese: str | None = None
+
+
 @router.get("", response_model=GrammarListResponse)
 def list_grammar(
     jlpt: JlptLevel | None = None,
@@ -106,6 +111,21 @@ def update_grammar(
 def delete_grammar(grammar_id: UUID) -> Response:
     grammar_service.archive_grammar(grammar_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{grammar_id}/examples/from-practice", response_model=GrammarOut)
+def add_grammar_example_from_practice(
+    grammar_id: UUID,
+    payload: AddExampleFromPracticeRequest,
+    background_tasks: BackgroundTasks,
+) -> GrammarOut:
+    result = grammar_service.add_example_from_practice(
+        grammar_id, japanese=payload.japanese, chinese=payload.chinese
+    )
+    background_tasks.add_task(
+        semantic_link_service.sync_entity_safe, LinkEntityType.GRAMMAR, grammar_id
+    )
+    return result
 
 
 @router.post("/{grammar_id}/enrich-image", response_model=GrammarOut)

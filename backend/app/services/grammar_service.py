@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
-from app.models.schemas.common import JlptLevel, SourceType, SupplementaryBlock
+from app.models.schemas.common import ExampleSentence, JlptLevel, SourceType, SupplementaryBlock
 from app.models.schemas.grammar import (
     GrammarOut,
     GrammarSummary,
@@ -259,6 +259,39 @@ class GrammarService:
         if rows:
             self.db.table("grammar_usages").insert(rows).execute()
         return self._load_grammar_out(grammar_id)
+
+    def add_example_from_practice(
+        self,
+        grammar_id: UUID,
+        *,
+        japanese: str,
+        chinese: str | None,
+    ) -> GrammarOut:
+        """Append an AI-graded practice translation as an example under the first usage."""
+        current = self.get_grammar(grammar_id)  # 404 if missing/archived
+        if not current.usages:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="此文法尚無用法，請先手動新增用法後再加入例句。",
+            )
+        usages = [
+            GrammarUsageWrite(
+                semantic_concept=u.semantic_concept,
+                connection_rule=u.connection_rule,
+                meaning_zh=u.meaning_zh,
+                example_sentences=list(u.example_sentences),
+            )
+            for u in current.usages
+        ]
+        usages[0].example_sentences.append(
+            ExampleSentence(japanese=japanese, chinese=chinese)
+        )
+        payload = GrammarWriteInput(
+            grammar_point=current.grammar_point,
+            jlpt_level=current.jlpt_level,
+            usages=usages,
+        )
+        return self.update_grammar(grammar_id, payload)
 
     def archive_grammar(self, grammar_id: UUID) -> None:
         existing = (

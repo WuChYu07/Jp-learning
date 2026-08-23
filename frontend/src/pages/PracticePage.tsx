@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import SpeakButton from "../components/SpeakButton";
 import {
   api,
@@ -12,6 +13,12 @@ import {
 type PracticeMode = "speak" | "hint_translate";
 type PracticeTopic = "daily" | "academic" | "travel" | "work" | "random";
 
+type PracticeNavState = {
+  mode?: PracticeMode;
+  grammarId?: string;
+  grammarPoint?: string;
+};
+
 const TOPICS: { id: PracticeTopic; label: string }[] = [
   { id: "random", label: "隨機" },
   { id: "daily", label: "日常" },
@@ -21,8 +28,16 @@ const TOPICS: { id: PracticeTopic; label: string }[] = [
 ];
 
 export default function PracticePage() {
-  const [mode, setMode] = useState<PracticeMode>("speak");
+  const location = useLocation();
+  const navState = location.state as PracticeNavState | null;
+  const [mode, setMode] = useState<PracticeMode>(navState?.mode ?? "speak");
   const [topic, setTopic] = useState<PracticeTopic>("random");
+  const [forcedGrammarId, setForcedGrammarId] = useState<string | undefined>(
+    navState?.grammarId,
+  );
+  const [forcedGrammarPoint, setForcedGrammarPoint] = useState<string | undefined>(
+    navState?.grammarPoint,
+  );
   const [prompt, setPrompt] = useState<PracticePrompt | null>(null);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,6 +45,9 @@ export default function PracticePage() {
   const [result, setResult] = useState<PracticeGradeResult | null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<PracticeDialogue[]>([]);
+  const [addingExample, setAddingExample] = useState(false);
+  const [exampleAdded, setExampleAdded] = useState(false);
+  const [addExampleError, setAddExampleError] = useState("");
 
   const loadHistory = useCallback(() => {
     api
@@ -42,6 +60,18 @@ export default function PracticePage() {
     loadHistory();
   }, [loadHistory]);
 
+  // Deep-linked from a grammar's detail page: jump straight into an exercise.
+  // Guarded with a ref (not just `loading`) so React StrictMode's dev-only
+  // double-invoke of mount effects can't fire this twice and burn extra quota.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (navState?.grammarId && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      void startSession();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startSession() {
     if (loading) return;
     setLoading(true);
@@ -49,13 +79,38 @@ export default function PracticePage() {
     setResult(null);
     setAnswer("");
     setPrompt(null);
+    setExampleAdded(false);
+    setAddExampleError("");
     try {
-      const p = await api.practiceSession(mode, topic);
+      const p = await api.practiceSession(mode, topic, forcedGrammarId);
       setPrompt(p);
     } catch (e) {
       setError(formatUserFacingError(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function clearForcedGrammar() {
+    setForcedGrammarId(undefined);
+    setForcedGrammarPoint(undefined);
+  }
+
+  async function addExampleToGrammar() {
+    if (!forcedGrammarId || !result?.model_answer || addingExample) return;
+    setAddingExample(true);
+    setAddExampleError("");
+    try {
+      await api.addGrammarExampleFromPractice(
+        forcedGrammarId,
+        result.model_answer,
+        prompt?.prompt_zh,
+      );
+      setExampleAdded(true);
+    } catch (e) {
+      setAddExampleError(formatUserFacingError(e));
+    } finally {
+      setAddingExample(false);
     }
   }
 
@@ -103,6 +158,20 @@ export default function PracticePage() {
           帶提示翻譯
         </ModeTab>
       </div>
+
+      {forcedGrammarId && (
+        <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
+          <span>已指定文法：{forcedGrammarPoint ?? forcedGrammarId}</span>
+          <button
+            type="button"
+            onClick={clearForcedGrammar}
+            aria-label="取消指定文法"
+            className="text-emerald-600 hover:text-emerald-900"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {TOPICS.map((t) => (
@@ -228,6 +297,25 @@ export default function PracticePage() {
                       caption="發音"
                     />
                   </div>
+                </div>
+              )}
+              {forcedGrammarId && result.model_answer && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void addExampleToGrammar()}
+                    disabled={addingExample || exampleAdded}
+                    className="rounded-full bg-teal-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {exampleAdded
+                      ? "已加入例句 ✓"
+                      : addingExample
+                        ? "加入中…"
+                        : `加入「${forcedGrammarPoint ?? "此文法"}」例句`}
+                  </button>
+                  {addExampleError && (
+                    <span className="text-xs text-red-600">{addExampleError}</span>
+                  )}
                 </div>
               )}
               <button
