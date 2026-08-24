@@ -161,16 +161,16 @@ export default function SwipeFlashcard({
           style={{ opacity: rightOpacity }}
         />
 
-        {/* Stamp: 不熟 */}
+        {/* Stamp: 有點難 */}
         <div
           aria-hidden
-          className="swipe-stamp pointer-events-none absolute left-6 top-6 rounded-xl border-4 border-red-500 px-3 py-1 text-lg font-bold text-red-500"
+          className="swipe-stamp pointer-events-none absolute left-6 top-6 rounded-xl border-4 border-amber-500 px-3 py-1 text-lg font-bold text-amber-600"
           style={{
             opacity: leftOpacity,
             transform: `rotate(-12deg) scale(${0.85 + progress * 0.15})`,
           }}
         >
-          不熟
+          有點難
         </div>
         {/* Stamp: 熟悉 */}
         <div
@@ -198,7 +198,7 @@ export default function SwipeFlashcard({
       {!exiting && (
         <>
           <p className="mt-4 text-center text-sm text-stone-400">
-            <span className="text-red-400">← 重來</span>
+            <span className="text-amber-600">← 有點難</span>
             <span className="mx-3">·</span>
             <span className="text-stone-500">點擊翻面</span>
             <span className="mx-3">·</span>
@@ -210,9 +210,9 @@ export default function SwipeFlashcard({
                 type="button"
                 disabled={disabled}
                 onClick={onRateHard}
-                className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-200 disabled:opacity-50"
+                className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 ring-1 ring-red-200 disabled:opacity-50"
               >
-                有點難 Hard
+                重來 Again
               </button>
               <button
                 type="button"

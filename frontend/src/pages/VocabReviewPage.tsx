@@ -262,9 +262,9 @@ export default function VocabReviewPage() {
         flipped={flipped}
         disabled={submitting}
         onFlip={() => setFlipped((f) => !f)}
-        onSwipeLeft={() => handleRating("again")}
+        onSwipeLeft={() => handleRating("hard")}
         onSwipeRight={() => handleRating("good")}
-        onRateHard={() => void handleRating("hard")}
+        onRateHard={() => void handleRating("again")}
         onRateEasy={() => void handleRating("easy")}
         cornerBadge={
           current!.review_score != null ? (

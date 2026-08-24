@@ -243,9 +243,9 @@ export default function GrammarReviewPage() {
         flipped={flipped}
         disabled={submitting}
         onFlip={() => setFlipped((f) => !f)}
-        onSwipeLeft={() => void handleRating("again")}
+        onSwipeLeft={() => void handleRating("hard")}
         onSwipeRight={() => void handleRating("good")}
-        onRateHard={() => void handleRating("hard")}
+        onRateHard={() => void handleRating("again")}
         onRateEasy={() => void handleRating("easy")}
         front={
           <>
