@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.core.http_client import create_sync_client
 from app.db.supabase import get_supabase_client
 from app.models.schemas.grammar import GrammarEnrichmentOutput, GrammarOut
-from app.services.gemini_client import is_quota_error, run_with_key_failover
+from app.services.gemini_client import is_quota_error, is_transient_error, run_with_key_failover
 from app.services.grammar_service import grammar_service
 from app.services.text_sanitize import clean_text
 
@@ -167,6 +167,11 @@ def _raise_gemini_http_error(exc: Exception, *, action_label: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"{action_label}失敗：AI 回傳內容過長被截斷，請再試一次。",
+        ) from exc
+    if is_transient_error(exc):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{action_label}失敗：Gemini 目前負載過高（已自動重試過仍失敗），請稍後再試一次。",
         ) from exc
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,

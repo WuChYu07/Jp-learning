@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -22,6 +23,11 @@ _preferred_index = 0
 _exhausted: set[str] = set()
 _clients: dict[str, genai.Client] = {}
 
+# Transient server-side overload (Google: "usually temporary") — worth a short
+# retry on the same key before burning a key-rotation attempt on it.
+_TRANSIENT_RETRIES = 2
+_TRANSIENT_RETRY_DELAY_SEC = 2.0
+
 
 def is_quota_error(exc: BaseException) -> bool:
     message = str(exc).upper()
@@ -31,6 +37,16 @@ def is_quota_error(exc: BaseException) -> bool:
         or "QUOTA" in message
         or "RATE LIMIT" in message
         or "RATE_LIMIT" in message
+    )
+
+
+def is_transient_error(exc: BaseException) -> bool:
+    message = str(exc).upper()
+    return (
+        "503" in message
+        or "UNAVAILABLE" in message
+        or "OVERLOADED" in message
+        or "HIGH DEMAND" in message
     )
 
 
@@ -91,8 +107,14 @@ def _promote(api_key: str) -> None:
 
 
 def run_with_key_failover(operation: Callable[[genai.Client], T]) -> T:
-    """Run ``operation(client)``, switching keys on free-tier quota errors."""
-    last_quota: BaseException | None = None
+    """Run ``operation(client)``, switching keys on free-tier quota errors.
+
+    Transient overload errors (503/UNAVAILABLE) get a couple of short
+    backoff retries on the same key first, since Google's own guidance is
+    that spikes are "usually temporary" — rotating keys wouldn't help a
+    model-wide capacity issue.
+    """
+    last_error: BaseException | None = None
     tried: set[str] = set()
 
     for api_key in _ordered_keys():
@@ -100,23 +122,36 @@ def run_with_key_failover(operation: Callable[[genai.Client], T]) -> T:
             continue
         tried.add(api_key)
         client = _client_for(api_key)
-        try:
-            result = operation(client)
-            _promote(api_key)
-            return result
-        except Exception as exc:
-            if is_quota_error(exc):
-                mark_exhausted(api_key)
-                last_quota = exc
-                logger.info(
-                    "Gemini quota error on …%s; trying next key",
-                    api_key[-4:] if len(api_key) >= 4 else "????",
-                )
-                continue
-            raise
 
-    if last_quota is not None:
-        raise last_quota
+        for attempt in range(_TRANSIENT_RETRIES + 1):
+            try:
+                result = operation(client)
+                _promote(api_key)
+                return result
+            except Exception as exc:
+                last_error = exc
+                if is_quota_error(exc):
+                    mark_exhausted(api_key)
+                    logger.info(
+                        "Gemini quota error on …%s; trying next key",
+                        api_key[-4:] if len(api_key) >= 4 else "????",
+                    )
+                    break
+                if is_transient_error(exc) and attempt < _TRANSIENT_RETRIES:
+                    delay = _TRANSIENT_RETRY_DELAY_SEC * (attempt + 1)
+                    logger.info(
+                        "Gemini transient error on …%s (attempt %d/%d); retrying in %.0fs",
+                        api_key[-4:] if len(api_key) >= 4 else "????",
+                        attempt + 1,
+                        _TRANSIENT_RETRIES,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+
+    if last_error is not None:
+        raise last_error
     raise RuntimeError("No Gemini API keys available")
 
 
