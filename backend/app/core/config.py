@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     AI_DAILY_LIMIT_ENFORCE: bool = False
 
     # SRS
-    SRS_DEFAULT_EASINESS_FACTOR: float = 2.5
+    SRS_DEFAULT_EASINESS_FACTOR: float = 2.1
     SRS_DEFAULT_INTERVAL_DAYS: int = 1
 
     # Auth — set false for single-user / local dev (no JWT required)

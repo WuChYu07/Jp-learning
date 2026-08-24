@@ -75,8 +75,33 @@ export default function VocabReviewPage() {
 
   async function handleRating(rating: "again" | "hard" | "good" | "easy") {
     if (!current || submitting) return;
-    setSubmitting(true);
     const wasLast = index >= cards.length - 1;
+
+    // This card already failed once this session and resurfaced a few
+    // cards later — recognizing it now mostly reflects short-term/working
+    // memory, not real spaced recall, so treat it as practice only: show
+    // it, let it requeue again if still shaky, but don't re-submit to the
+    // backend (that would let a few-cards-later recognition masquerade as
+    // a real SM-2 success and fast-forward its schedule).
+    if (leechesRef.current.some((c) => c.id === current.id)) {
+      setLastDelta(null);
+      if (rating === "again") {
+        setCards((prev) => requeueAfterFail(prev, index));
+      } else {
+        leechesRef.current = leechesRef.current.filter((c) => c.id !== current.id);
+      }
+      setFlipped(false);
+      if (rating === "again") {
+        if (wasLast) setBatchDone(true);
+      } else if (index + 1 < cards.length) {
+        setIndex(index + 1);
+      } else {
+        setBatchDone(true);
+      }
+      return;
+    }
+
+    setSubmitting(true);
     try {
       const result = await api.submitReview(current.id, rating);
       const sd = result.score_delta ?? 0;

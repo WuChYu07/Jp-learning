@@ -38,11 +38,22 @@ def apply_review(state: SrsState, quality: int) -> SrsUpdate:
     interval = state.interval_days
     now = datetime.now(UTC)
 
+    # EF reflects overall recall difficulty, so every rating adjusts it —
+    # not just the ones that count as a successful recall.
+    ef = max(
+        1.3,
+        ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)),
+    )
+
     if quality < 3:
         reps = 0
         interval = 1
         next_review = now + timedelta(minutes=AGAIN_REQUEUE_MINUTES)
     else:
+        if quality == 3:
+            # Hard still counts as a recall, but resets the streak like a
+            # miss so the interval ramp restarts (1 day, then 6, ...).
+            reps = 0
         if reps == 0:
             interval = 1
         elif reps == 1:
@@ -50,10 +61,6 @@ def apply_review(state: SrsState, quality: int) -> SrsUpdate:
         else:
             interval = max(1, round(interval * ef))
         reps += 1
-        ef = max(
-            1.3,
-            ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)),
-        )
         next_review = now + timedelta(days=interval)
 
     return SrsUpdate(
