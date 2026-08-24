@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import EditModalShell from "../components/EditModalShell";
 import GrammarForm from "../components/GrammarForm";
@@ -17,6 +17,7 @@ import {
   formatUserFacingError,
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
+import { exampleMarks, renderHighlightedJapanese } from "../lib/highlightJapanese";
 import { renderFormattedText, stripFormatting } from "../lib/textFormat";
 
 const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1", "unknown"] as const;
@@ -1070,7 +1071,11 @@ function ExampleBlock({
     <div className="rounded-xl bg-green-50 p-4">
       <div className="flex items-start justify-between gap-2">
         <p className="kanji-display min-w-0 flex-1 whitespace-pre-wrap text-base leading-relaxed">
-          {renderHighlightedJapanese(example.japanese, exampleMarks(example), grammarPoint)}
+          {renderHighlightedJapanese(
+            example.japanese,
+            exampleMarks(example),
+            grammarHighlightCandidates(grammarPoint),
+          )}
         </p>
         <SpeakButton size="sm" text={example.japanese} label="播放例句發音" caption="播例句" />
       </div>
@@ -1084,13 +1089,9 @@ function ExampleBlock({
   );
 }
 
-/** Merge new multi-mark `highlights` with the legacy single `highlight` field. */
-function exampleMarks(example: ExampleSentence): string[] {
-  if (example.highlights?.length) return example.highlights;
-  return example.highlight ? [example.highlight] : [];
-}
-
-/** Build candidate substrings from grammar_point like 「〜おきに」「〜つもりだ」. */
+/** Build candidate substrings from grammar_point like 「〜おきに」「〜つもりだ」.
+ * Includes the stripped "core" form so conjugated sentence forms (e.g.
+ * grammar 「つもりだ」 inside 「つもりだった」) still match. */
 function grammarHighlightCandidates(grammarPoint: string): string[] {
   const raw = grammarPoint.trim();
   if (!raw) return [];
@@ -1106,98 +1107,4 @@ function grammarHighlightCandidates(grammarPoint: string): string[] {
   // Longer first so 「つもりだった」-style matches prefer fuller forms when provided via highlight.
   const unique = [...new Set(candidates)].sort((a, b) => b.length - a.length);
   return unique.filter((c) => c.length >= 1);
-}
-
-type HighlightRange = { start: number; end: number };
-
-function addRange(ranges: HighlightRange[], start: number, end: number) {
-  const overlaps = ranges.some((r) => start < r.end && end > r.start);
-  if (!overlaps) ranges.push({ start, end });
-}
-
-/** Finds the first occurrence of `needle` not already claimed by `ranges`,
- * so the same word appearing multiple times can each get its own mark. */
-function findNextOccurrence(
-  japanese: string,
-  needle: string,
-  ranges: HighlightRange[],
-): HighlightRange | null {
-  let from = 0;
-  while (from <= japanese.length) {
-    const idx = japanese.indexOf(needle, from);
-    if (idx < 0) return null;
-    const end = idx + needle.length;
-    const overlaps = ranges.some((r) => idx < r.end && end > r.start);
-    if (!overlaps) return { start: idx, end };
-    from = idx + 1;
-  }
-  return null;
-}
-
-function findHighlightRanges(
-  japanese: string,
-  explicitMarks: string[],
-  grammarPoint: string,
-): HighlightRange[] {
-  const ranges: HighlightRange[] = [];
-
-  for (const mark of explicitMarks) {
-    const needle = mark.trim();
-    if (!needle) continue;
-    const found = findNextOccurrence(japanese, needle, ranges);
-    if (found) ranges.push(found);
-  }
-  if (ranges.length > 0) {
-    return ranges.sort((a, b) => a.start - b.start);
-  }
-
-  for (const candidate of grammarHighlightCandidates(grammarPoint)) {
-    const idx = japanese.indexOf(candidate);
-    if (idx >= 0) {
-      addRange(ranges, idx, idx + candidate.length);
-      break;
-    }
-  }
-  if (ranges.length > 0) return ranges;
-
-  // Soft match: ignore 〜 and try core token again inside conjugated forms
-  // e.g. grammar 「つもりだ」 in sentence 「つもりだった」 → highlight 「つもりだ」
-  const core = grammarPoint
-    .replace(/^[〜～~]+/, "")
-    .replace(/[（(].*?[）)]/g, "")
-    .replace(/[／/].*$/, "")
-    .trim();
-  if (core.length >= 2) {
-    const idx = japanese.indexOf(core);
-    if (idx >= 0) addRange(ranges, idx, idx + core.length);
-  }
-
-  return ranges;
-}
-
-function renderHighlightedJapanese(
-  japanese: string,
-  explicitMarks: string[],
-  grammarPoint: string,
-) {
-  const ranges = findHighlightRanges(japanese, explicitMarks, grammarPoint);
-  if (ranges.length === 0) return japanese;
-
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-  ranges.forEach((range, i) => {
-    if (range.start > cursor) nodes.push(japanese.slice(cursor, range.start));
-    nodes.push(
-      <mark
-        key={i}
-        className="rounded px-0.5 bg-orange-200/90 font-bold text-[var(--color-primary-dark)] not-italic"
-      >
-        {japanese.slice(range.start, range.end)}
-      </mark>,
-    );
-    cursor = range.end;
-  });
-  if (cursor < japanese.length) nodes.push(japanese.slice(cursor));
-
-  return <>{nodes}</>;
 }

@@ -4,11 +4,22 @@ import SpeakButton from "../components/SpeakButton";
 import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
 import RelationHints from "../components/RelationHints";
-import { api, Vocabulary, VocabularySummary, VocabularyWriteInput, formatUserFacingError } from "../lib/api";
+import {
+  api,
+  Vocabulary,
+  VocabDefinition,
+  VocabularySummary,
+  VocabularyWriteInput,
+  formatUserFacingError,
+} from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
+import { exampleMarks, renderHighlightedJapanese } from "../lib/highlightJapanese";
 import { vocabDisplay } from "../lib/vocabDisplay";
 
-const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1"] as const;
+const JLPT_FILTERS = ["", "N5", "N4", "N3", "N2", "N1", "unknown"] as const;
+const JLPT_FILTER_LABELS: Partial<Record<(typeof JLPT_FILTERS)[number], string>> = {
+  unknown: "Unknown（未分類）",
+};
 const PAGE_SIZE = 100;
 const SWIPE_NAV_PREF_KEY = "vocab-swipe-nav-enabled";
 
@@ -42,6 +53,7 @@ export default function VocabPage() {
   const [swipeNavEnabled, setSwipeNavEnabled] = useState(
     () => localStorage.getItem(SWIPE_NAV_PREF_KEY) !== "off",
   );
+  const [editing, setEditing] = useState(false);
   const detailReqId = useRef(0);
   const viewedIds = useRef<Set<string>>(new Set());
   const loadHint = useSlowLoadHint(loading);
@@ -85,6 +97,10 @@ export default function VocabPage() {
     const navId = (location.state as { vocabularyId?: string } | null)?.vocabularyId;
     if (navId) setSelectedId(navId);
   }, [location.state]);
+
+  useEffect(() => {
+    setEditing(false);
+  }, [selectedId]);
 
   // Fetch full detail when selection changes; record daily view bonus once per id session.
   useEffect(() => {
@@ -134,7 +150,7 @@ export default function VocabPage() {
   }
 
   async function goNextRandom() {
-    if (nextLoading) return;
+    if (nextLoading || editing) return;
     setNextLoading(true);
     setError("");
     try {
@@ -220,7 +236,7 @@ export default function VocabPage() {
           <option value="">全部 JLPT</option>
           {JLPT_FILTERS.filter(Boolean).map((level) => (
             <option key={level} value={level}>
-              {level}
+              {JLPT_FILTER_LABELS[level] ?? level}
             </option>
           ))}
         </select>
@@ -311,7 +327,7 @@ export default function VocabPage() {
             ) : selected ? (
               <SwipeNavigate
                 onSwipeRight={() => void goNextRandom()}
-                disabled={!swipeNavEnabled || nextLoading}
+                disabled={!swipeNavEnabled || nextLoading || editing}
                 hint={
                   swipeNavEnabled
                     ? "右滑或按下方按鈕 → 下一個（低分優先）"
@@ -351,7 +367,7 @@ export default function VocabPage() {
                     </p>
                     <button
                       type="button"
-                      disabled={nextLoading}
+                      disabled={nextLoading || editing}
                       onClick={() => void goNextRandom()}
                       className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
@@ -362,6 +378,7 @@ export default function VocabPage() {
                     vocab={selected}
                     onDelete={() => void handleDelete()}
                     deleting={deleting}
+                    onEditingChange={setEditing}
                     onSaved={(updated) => {
                       setSelected(updated);
                       setItems((prev) =>
@@ -398,12 +415,14 @@ function VocabDetail({
   onError,
   onDelete,
   deleting,
+  onEditingChange,
 }: {
   vocab: Vocabulary;
   onSaved: (updated: Vocabulary) => void;
   onError: (message: string) => void;
   onDelete: () => void;
   deleting: boolean;
+  onEditingChange: (editing: boolean) => void;
 }) {
   const [enriching, setEnriching] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -411,11 +430,48 @@ function VocabDetail({
     source: "manual" | "ai";
     draft: Vocabulary;
   } | null>(null);
+  const [activeDefIdx, setActiveDefIdx] = useState(0);
   const { primary, secondary } = vocabDisplay(vocab.word, vocab.reading);
   const primaryDef = vocab.definitions[0];
   const hasExamples = (primaryDef?.example_sentences?.length ?? 0) > 0;
   const hasNotes = Boolean(primaryDef?.notes_zh?.trim());
   const needsEnrich = !hasExamples || !hasNotes;
+  const highlightCandidates = useMemo(
+    () => vocabHighlightCandidates(vocab.word, vocab.reading),
+    [vocab.word, vocab.reading],
+  );
+
+  useEffect(() => {
+    setActiveDefIdx(0);
+  }, [vocab.id]);
+
+  useEffect(() => {
+    onEditingChange(modal !== null);
+  }, [modal, onEditingChange]);
+
+  useEffect(() => {
+    if (vocab.definitions.length <= 1) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const best = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!best?.target.id) return;
+
+        const idx = vocab.definitions.findIndex((def) => `def-${def.id}` === best.target.id);
+        if (idx >= 0) setActiveDefIdx(idx);
+      },
+      { rootMargin: "-15% 0px -55% 0px", threshold: [0.15, 0.4, 0.7] },
+    );
+
+    for (const def of vocab.definitions) {
+      const element = document.getElementById(`def-${def.id}`);
+      if (element) observer.observe(element);
+    }
+
+    return () => observer.disconnect();
+  }, [vocab.definitions]);
 
   async function handleAiEnrich() {
     if (enriching) return;
@@ -450,9 +506,7 @@ function VocabDetail({
       <div className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
-              {vocab.jlpt_level}
-            </span>
+            <JlptBadge level={vocab.jlpt_level} />
             {vocab.review_score != null && (
               <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
                 熟練度 {Math.round(vocab.review_score)}
@@ -513,67 +567,104 @@ function VocabDetail({
         <p className="text-sm text-stone-400">尚無釋義</p>
       )}
 
-      {vocab.definitions.map((def) => (
-        <div
-          key={def.id}
-          className="space-y-4 rounded-2xl border-l-4 border-l-orange-500 bg-white p-5 ring-1 ring-orange-100"
-        >
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
-                中文
+      {vocab.definitions.length > 1 && (
+        <DefinitionNavigator
+          definitions={vocab.definitions}
+          activeIndex={activeDefIdx}
+          onSelect={(index) => {
+            setActiveDefIdx(index);
+            const def = vocab.definitions[index];
+            document.getElementById(`def-${def.id}`)?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }}
+        />
+      )}
+
+      {vocab.definitions.map((def, index) => {
+        const multi = vocab.definitions.length > 1;
+        return (
+          <div
+            key={def.id}
+            id={`def-${def.id}`}
+            className={`scroll-mt-28 space-y-4 rounded-2xl border-l-4 border-l-orange-500 bg-white p-5 ring-1 transition ${
+              multi && activeDefIdx === index
+                ? "ring-2 ring-orange-300 shadow-md"
+                : "ring-orange-100"
+            }`}
+          >
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {multi && (
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-600 text-xs font-bold text-white">
+                    {index + 1}
+                  </span>
+                )}
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                  中文
+                </p>
+                {def.part_of_speech && def.part_of_speech !== "other" && (
+                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-900">
+                    {POS_LABELS[def.part_of_speech] || def.part_of_speech}
+                  </span>
+                )}
+              </div>
+              <p className="whitespace-pre-wrap text-lg font-semibold text-[var(--color-primary-dark)]">
+                {def.meaning_zh}
               </p>
-              {def.part_of_speech && def.part_of_speech !== "other" && (
-                <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-900">
-                  {POS_LABELS[def.part_of_speech] || def.part_of_speech}
-                </span>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                例句
+              </p>
+              {def.example_sentences?.length > 0 ? (
+                <ul className="space-y-3">
+                  {def.example_sentences.map((ex, i) => (
+                    <li
+                      key={`${ex.japanese}-${i}`}
+                      className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-700"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="kanji-display min-w-0 flex-1 whitespace-pre-wrap font-medium">
+                          {renderHighlightedJapanese(
+                            ex.japanese,
+                            exampleMarks(ex),
+                            highlightCandidates,
+                          )}
+                        </p>
+                        <SpeakButton size="sm" text={ex.japanese} label="播放例句發音" caption="播例句" />
+                      </div>
+                      {ex.reading && (
+                        <p className="mt-0.5 whitespace-pre-wrap text-xs text-stone-400">{ex.reading}</p>
+                      )}
+                      {ex.chinese && (
+                        <p className="mt-1 whitespace-pre-wrap text-stone-600">{ex.chinese}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-stone-400">尚無例句 — 可按「AI 補充」或「編輯」</p>
               )}
             </div>
-            <p className="whitespace-pre-wrap text-lg font-semibold text-[var(--color-primary-dark)]">
-              {def.meaning_zh}
-            </p>
-          </div>
 
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-              例句
-            </p>
-            {def.example_sentences?.length > 0 ? (
-              <ul className="space-y-3">
-                {def.example_sentences.map((ex, i) => (
-                  <li
-                    key={`${ex.japanese}-${i}`}
-                    className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-700"
-                  >
-                    <p className="whitespace-pre-wrap font-medium">{ex.japanese}</p>
-                    {ex.reading && (
-                      <p className="mt-0.5 whitespace-pre-wrap text-xs text-stone-400">{ex.reading}</p>
-                    )}
-                    {ex.chinese && (
-                      <p className="mt-1 whitespace-pre-wrap text-stone-600">{ex.chinese}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-stone-400">尚無例句 — 可按「AI 補充」或「編輯」</p>
-            )}
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-              補充
-            </p>
-            {def.notes_zh?.trim() ? (
-              <p className="whitespace-pre-wrap rounded-xl bg-amber-50/80 px-4 py-3 text-sm leading-relaxed text-stone-700 ring-1 ring-amber-100">
-                {def.notes_zh}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                補充
               </p>
-            ) : (
-              <p className="text-sm text-stone-400">尚無補充 — 可按「AI 補充」或「編輯」</p>
-            )}
+              {def.notes_zh?.trim() ? (
+                <p className="whitespace-pre-wrap rounded-xl bg-amber-50/80 px-4 py-3 text-sm leading-relaxed text-stone-700 ring-1 ring-amber-100">
+                  {def.notes_zh}
+                </p>
+              ) : (
+                <p className="text-sm text-stone-400">尚無補充 — 可按「AI 補充」或「編輯」</p>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <RelationHints entityId={vocab.id} entityType="vocabulary" />
 
@@ -589,4 +680,105 @@ function VocabDetail({
       )}
     </div>
   );
+}
+
+function JlptBadge({ level }: { level: string }) {
+  if (!level || level === "unknown") {
+    return <p className="text-sm text-stone-400">JLPT 待分類</p>;
+  }
+  return (
+    <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
+      JLPT {level}
+    </span>
+  );
+}
+
+/** Candidate substrings to highlight within example sentences: prefer the
+ * headword (usually kanji, more specific), fall back to the reading. Some
+ * entries pack multiple near-synonyms into one word field (e.g. 「1.務める
+ * 2.勤める 3.努める」) — split those out too so each still matches its own
+ * example sentence. */
+function vocabHighlightCandidates(word: string, reading?: string): string[] {
+  const parts = word
+    .split(/\s+/)
+    .map((p) => p.replace(/^\d+[.．、]\s*/, "").trim())
+    .filter(Boolean);
+  const candidates = [word.trim(), ...parts, reading?.trim()].filter((c): c is string =>
+    Boolean(c),
+  );
+  return [...new Set(candidates)].sort((a, b) => b.length - a.length);
+}
+
+function DefinitionNavigator({
+  definitions,
+  activeIndex,
+  onSelect,
+}: {
+  definitions: VocabDefinition[];
+  activeIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  // New word selection: expand again so tags are easy to reach.
+  useEffect(() => {
+    setOpen(true);
+  }, [definitions.map((d) => d.id).join("|")]);
+
+  return (
+    <div className="sticky top-2 z-10 rounded-2xl bg-white/95 shadow-sm ring-1 ring-orange-200 backdrop-blur">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-orange-50/60"
+      >
+        <p className="text-sm font-bold text-[var(--color-primary-dark)]">
+          此單字有 {definitions.length} 個釋義
+        </p>
+        <span className="flex items-center gap-2 text-xs text-stone-500">
+          <span className="hidden sm:inline">{open ? "點選標籤可跳轉" : "點此展開"}</span>
+          <span
+            aria-hidden
+            className={`inline-block text-stone-400 transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            ▾
+          </span>
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-orange-100 px-4 pb-4 pt-3">
+          <div className="flex flex-wrap gap-2">
+            {definitions.map((def, index) => {
+              const label = defNavLabel(def, index);
+              return (
+                <button
+                  key={def.id}
+                  type="button"
+                  data-active={activeIndex === index}
+                  onClick={() => onSelect(index)}
+                  className="inline-flex max-w-full items-center gap-2 rounded-full bg-stone-50 px-3 py-1.5 text-left text-sm font-semibold text-stone-700 ring-1 ring-orange-100 transition hover:bg-orange-50 data-[active=true]:bg-orange-600 data-[active=true]:text-white data-[active=true]:ring-orange-200"
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      activeIndex === index ? "bg-white/25 text-white" : "bg-orange-600 text-white"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function defNavLabel(def: VocabDefinition, index: number): string {
+  const meaning = def.meaning_zh?.trim();
+  if (!meaning) return `釋義 ${index + 1}`;
+  return meaning.length > 16 ? `${meaning.slice(0, 16)}…` : meaning;
 }
