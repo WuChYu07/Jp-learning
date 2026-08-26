@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
+import httpx
 from google import genai
 from google.genai import types
 
@@ -28,6 +29,12 @@ _clients: dict[str, genai.Client] = {}
 _TRANSIENT_RETRIES = 2
 _TRANSIENT_RETRY_DELAY_SEC = 2.0
 
+# The google-genai SDK does not honor the httpx client's own default timeout
+# for generate_content calls (it appears to issue requests as effectively
+# unbounded unless HttpOptions.timeout is set) — without this, a stalled
+# request to Google hangs forever with no exception ever raised.
+_REQUEST_TIMEOUT_SEC = 90.0
+
 
 def is_quota_error(exc: BaseException) -> bool:
     message = str(exc).upper()
@@ -41,12 +48,21 @@ def is_quota_error(exc: BaseException) -> bool:
 
 
 def is_transient_error(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.TimeoutException):
+        return True
     message = str(exc).upper()
     return (
         "503" in message
         or "UNAVAILABLE" in message
         or "OVERLOADED" in message
         or "HIGH DEMAND" in message
+        or "500" in message
+        or "504" in message
+        or "SERVER DISCONNECTED" in message
+        or "CONNECTION RESET" in message
+        or "REMOTEPROTOCOLERROR" in message
+        or "CONNECTERROR" in message
+        or "TIMED OUT" in message
     )
 
 
@@ -59,7 +75,10 @@ def _client_for(api_key: str) -> genai.Client:
     if client is None:
         client = genai.Client(
             api_key=api_key,
-            http_options=types.HttpOptions(httpx_client=create_sync_client()),
+            http_options=types.HttpOptions(
+                httpx_client=create_sync_client(timeout=_REQUEST_TIMEOUT_SEC),
+                timeout=int(_REQUEST_TIMEOUT_SEC * 1000),
+            ),
         )
         _clients[api_key] = client
     return client

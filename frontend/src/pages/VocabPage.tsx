@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import SpeakButton from "../components/SpeakButton";
 import SwipeNavigate from "../components/SwipeNavigate";
 import VocabEditModal from "../components/VocabEditModal";
@@ -424,6 +424,7 @@ function VocabDetail({
   deleting: boolean;
   onEditingChange: (editing: boolean) => void;
 }) {
+  const navigate = useNavigate();
   const [enriching, setEnriching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<{
@@ -533,6 +534,21 @@ function VocabDetail({
               className="rounded-full bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-700"
             >
               編輯
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                navigate("/practice", {
+                  state: {
+                    mode: "hint_translate",
+                    vocabId: vocab.id,
+                    vocabWord: vocab.word,
+                  },
+                })
+              }
+              className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              AI 練習
             </button>
             <button
               type="button"

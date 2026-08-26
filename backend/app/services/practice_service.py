@@ -87,6 +87,7 @@ Keep the question natural and answerable in 1–3 sentences.
 _HINT_TRANSLATE_PROMPT = """You are a Japanese teacher. Create a Chinese→Japanese translation exercise.
 Topic: {topic}
 Required grammar (design the Chinese sentence so this Japanese grammar point is the natural, necessary way to translate it — it MUST appear in the intended Japanese translation): {required_grammar}
+Required vocabulary (design the Chinese sentence so this Japanese word is the natural, necessary way to translate it — it MUST appear in the intended Japanese translation): {required_vocab}
 Optional hint vocabulary (prefer using some): {vocab_hints}
 Optional hint grammar (prefer using some; ignore this list if a required grammar is given above): {grammar_hints}
 
@@ -97,7 +98,7 @@ Return ONLY valid JSON:
     {{"kind": "vocab"|"grammar", "label": "<word or grammar>", "detail": "<brief Traditional Chinese tip>"}}
   ]
 }}
-Provide 1–3 hints. If a required grammar is given, it MUST be one of the hints (kind="grammar", label set to that exact grammar point). The Chinese sentence should be everyday or lightly academic as topic suggests.
+Provide 1–3 hints. If a required grammar is given, it MUST be one of the hints (kind="grammar", label set to that exact grammar point). If a required vocabulary is given, it MUST be one of the hints (kind="vocab", label set to that exact word). The Chinese sentence should be everyday or lightly academic as topic suggests.
 """
 
 _GRADE_SPEAK = """Grade the learner's Japanese answer to a Japanese question.
@@ -132,13 +133,16 @@ class PracticeService:
         mode: PracticeMode,
         topic: PracticeTopic = "random",
         grammar_id: str | None = None,
+        vocab_id: str | None = None,
     ) -> PracticePromptOut:
         limit_reached = self._check_daily_limit(user_id)
         resolved_topic = self._resolve_topic(topic)
         result = (
             self._prompt_speak(resolved_topic)
             if mode == "speak"
-            else self._prompt_hint_translate(resolved_topic, grammar_id=grammar_id)
+            else self._prompt_hint_translate(
+                resolved_topic, grammar_id=grammar_id, vocab_id=vocab_id
+            )
         )
         result.daily_ai_limit_reached = limit_reached
         return result
@@ -275,14 +279,20 @@ class PracticeService:
         )
 
     def _prompt_hint_translate(
-        self, topic: str, *, grammar_id: str | None = None
+        self,
+        topic: str,
+        *,
+        grammar_id: str | None = None,
+        vocab_id: str | None = None,
     ) -> PracticePromptOut:
         vocab_hints, grammar_hints = self._sample_library_hints()
         required_grammar = self._fetch_grammar_point(grammar_id) if grammar_id else None
+        required_vocab = self._fetch_vocab_word(vocab_id) if vocab_id else None
         data = self._gemini_json(
             _HINT_TRANSLATE_PROMPT.format(
                 topic=topic,
                 required_grammar=required_grammar or "(none)",
+                required_vocab=required_vocab or "(none)",
                 vocab_hints=", ".join(vocab_hints) or "(none)",
                 grammar_hints=", ".join(grammar_hints) or "(none)",
             ),
@@ -309,16 +319,23 @@ class PracticeService:
         if not hints:
             if required_grammar:
                 hints.append(PracticeHint(kind="grammar", label=required_grammar))
+            if required_vocab:
+                hints.append(PracticeHint(kind="vocab", label=required_vocab))
             for w in vocab_hints[:2]:
                 hints.append(PracticeHint(kind="vocab", label=w))
             if not required_grammar:
                 for g in grammar_hints[:1]:
                     hints.append(PracticeHint(kind="grammar", label=g))
-        elif required_grammar and not any(
-            h.kind == "grammar" and h.label == required_grammar for h in hints
-        ):
-            # Model gave hints but dropped the required one — make sure it's still shown.
-            hints.insert(0, PracticeHint(kind="grammar", label=required_grammar))
+        else:
+            # Model gave hints but may have dropped a required one — keep it shown.
+            if required_grammar and not any(
+                h.kind == "grammar" and h.label == required_grammar for h in hints
+            ):
+                hints.insert(0, PracticeHint(kind="grammar", label=required_grammar))
+            if required_vocab and not any(
+                h.kind == "vocab" and h.label == required_vocab for h in hints
+            ):
+                hints.insert(0, PracticeHint(kind="vocab", label=required_vocab))
 
         return PracticePromptOut(
             mode="hint_translate",
@@ -341,6 +358,20 @@ class PracticeService:
             return rows[0]["grammar_point"] if rows else None
         except Exception:
             logger.exception("failed to fetch forced grammar point for practice")
+            return None
+
+    def _fetch_vocab_word(self, vocab_id: str) -> str | None:
+        try:
+            rows = (
+                self.db.table("vocabularies")
+                .select("word")
+                .eq("id", vocab_id)
+                .limit(1)
+                .execute()
+            ).data or []
+            return rows[0]["word"] if rows else None
+        except Exception:
+            logger.exception("failed to fetch forced vocab word for practice")
             return None
 
     def _sample_library_hints(self) -> tuple[list[str], list[str]]:

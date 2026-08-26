@@ -35,6 +35,11 @@ class ReviewSubmitRequest(BaseModel):
     rating: str = Field(description="again | hard | good | easy")
 
 
+class AddExampleFromPracticeRequest(BaseModel):
+    japanese: str
+    chinese: str | None = None
+
+
 @router.get("", response_model=VocabListResponse)
 def list_vocabulary(
     jlpt: JlptLevel | None = None,
@@ -101,6 +106,21 @@ def sync_vocab_semantic_links(vocabulary_id: UUID) -> dict:
 def ai_enrich_vocabulary(vocabulary_id: UUID) -> VocabularyOut:
     """Preview AI gap-fill draft only — does not write DB until client PUT."""
     return vocab_enrichment_service.preview_enrich(vocabulary_id)
+
+
+@router.post("/{vocabulary_id}/examples/from-practice", response_model=VocabularyOut)
+def add_vocab_example_from_practice(
+    vocabulary_id: UUID,
+    payload: AddExampleFromPracticeRequest,
+    background_tasks: BackgroundTasks,
+) -> VocabularyOut:
+    result = vocab_service.add_example_from_practice(
+        vocabulary_id, japanese=payload.japanese, chinese=payload.chinese
+    )
+    background_tasks.add_task(
+        semantic_link_service.sync_entity_safe, LinkEntityType.VOCABULARY, vocabulary_id
+    )
+    return result
 
 
 @router.put("/{vocabulary_id}", response_model=VocabularyOut)

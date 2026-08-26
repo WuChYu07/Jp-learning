@@ -637,7 +637,18 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   aiEnrichVocab: (id: string) =>
-    request<Vocabulary>(`/api/v1/vocab/${id}/ai-enrich`, { method: "POST" }),
+    request<Vocabulary>(
+      `/api/v1/vocab/${id}/ai-enrich`,
+      { method: "POST" },
+      // Structured Gemini generation can legitimately take longer than the
+      // default 45s; a retry here just restarts the same slow call.
+      { timeoutMs: 5 * 60_000, maxAttempts: 1 },
+    ),
+  addVocabExampleFromPractice: (id: string, japanese: string, chinese?: string | null) =>
+    request<Vocabulary>(`/api/v1/vocab/${id}/examples/from-practice`, {
+      method: "POST",
+      body: JSON.stringify({ japanese, chinese: chinese ?? null }),
+    }),
   deleteVocab: (id: string) =>
     request<void>(`/api/v1/vocab/${id}`, { method: "DELETE" }),
   dueVocab: (limit = 10, offset = 0) =>
@@ -715,11 +726,13 @@ export const api = {
     request<Grammar>(
       `/api/v1/grammar/${id}/enrich-image?dry_run=${dryRun ? "true" : "false"}`,
       { method: "POST" },
+      { timeoutMs: 5 * 60_000, maxAttempts: 1 },
     ),
   aiExplainGrammar: (id: string, dryRun = true) =>
     request<Grammar>(
       `/api/v1/grammar/${id}/ai-explain?dry_run=${dryRun ? "true" : "false"}`,
       { method: "POST" },
+      { timeoutMs: 5 * 60_000, maxAttempts: 1 },
     ),
   addGrammarExampleFromPractice: (id: string, japanese: string, chinese?: string | null) =>
     request<Grammar>(`/api/v1/grammar/${id}/examples/from-practice`, {
@@ -825,7 +838,7 @@ export const api = {
         // Notion pages with thousands of blocks are rate-limited on Notion's
         // side and can take minutes to fetch in full; one long attempt beats
         // three short ones that all restart the same expensive work.
-        timeoutMs: 10 * 60_000,
+        timeoutMs: 30 * 60_000,
         maxAttempts: 1,
         wakeMessage:
           "同步逾時。若 Notion 頁面資料量很大，首次或有大量變更時可能需要數分鐘，請稍後再試一次；若持續逾時請確認後端狀態。",
@@ -865,7 +878,7 @@ export const api = {
         }),
       },
       {
-        timeoutMs: 10 * 60_000,
+        timeoutMs: 30 * 60_000,
         maxAttempts: 1,
         wakeMessage:
           "匯入逾時。項目較多時可能需要數分鐘，請稍後再試一次；若持續逾時請確認後端狀態。",
@@ -989,10 +1002,16 @@ export const api = {
     mode: "speak" | "hint_translate",
     topic: "daily" | "academic" | "travel" | "work" | "random" = "random",
     grammarId?: string,
+    vocabId?: string,
   ) =>
     request<PracticePrompt>("/api/v1/practice/session", {
       method: "POST",
-      body: JSON.stringify({ mode, topic, grammar_id: grammarId ?? null }),
+      body: JSON.stringify({
+        mode,
+        topic,
+        grammar_id: grammarId ?? null,
+        vocab_id: vocabId ?? null,
+      }),
     }),
   practiceGrade: (payload: {
     mode: "speak" | "hint_translate" | string;

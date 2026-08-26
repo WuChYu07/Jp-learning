@@ -17,6 +17,8 @@ type PracticeNavState = {
   mode?: PracticeMode;
   grammarId?: string;
   grammarPoint?: string;
+  vocabId?: string;
+  vocabWord?: string;
 };
 
 const TOPICS: { id: PracticeTopic; label: string }[] = [
@@ -37,6 +39,12 @@ export default function PracticePage() {
   );
   const [forcedGrammarPoint, setForcedGrammarPoint] = useState<string | undefined>(
     navState?.grammarPoint,
+  );
+  const [forcedVocabId, setForcedVocabId] = useState<string | undefined>(
+    navState?.vocabId,
+  );
+  const [forcedVocabWord, setForcedVocabWord] = useState<string | undefined>(
+    navState?.vocabWord,
   );
   const [prompt, setPrompt] = useState<PracticePrompt | null>(null);
   const [answer, setAnswer] = useState("");
@@ -65,7 +73,7 @@ export default function PracticePage() {
   // double-invoke of mount effects can't fire this twice and burn extra quota.
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (navState?.grammarId && !autoStartedRef.current) {
+    if ((navState?.grammarId || navState?.vocabId) && !autoStartedRef.current) {
       autoStartedRef.current = true;
       void startSession();
     }
@@ -82,7 +90,7 @@ export default function PracticePage() {
     setExampleAdded(false);
     setAddExampleError("");
     try {
-      const p = await api.practiceSession(mode, topic, forcedGrammarId);
+      const p = await api.practiceSession(mode, topic, forcedGrammarId, forcedVocabId);
       setPrompt(p);
     } catch (e) {
       setError(formatUserFacingError(e));
@@ -91,21 +99,33 @@ export default function PracticePage() {
     }
   }
 
-  function clearForcedGrammar() {
+  function clearForcedTarget() {
     setForcedGrammarId(undefined);
     setForcedGrammarPoint(undefined);
+    setForcedVocabId(undefined);
+    setForcedVocabWord(undefined);
   }
 
-  async function addExampleToGrammar() {
-    if (!forcedGrammarId || !result?.model_answer || addingExample) return;
+  async function addExampleToLibrary() {
+    if (!result?.model_answer || addingExample) return;
     setAddingExample(true);
     setAddExampleError("");
     try {
-      await api.addGrammarExampleFromPractice(
-        forcedGrammarId,
-        result.model_answer,
-        prompt?.prompt_zh,
-      );
+      if (forcedGrammarId) {
+        await api.addGrammarExampleFromPractice(
+          forcedGrammarId,
+          result.model_answer,
+          prompt?.prompt_zh,
+        );
+      } else if (forcedVocabId) {
+        await api.addVocabExampleFromPractice(
+          forcedVocabId,
+          result.model_answer,
+          prompt?.prompt_zh,
+        );
+      } else {
+        return;
+      }
       setExampleAdded(true);
     } catch (e) {
       setAddExampleError(formatUserFacingError(e));
@@ -159,13 +179,18 @@ export default function PracticePage() {
         </ModeTab>
       </div>
 
-      {forcedGrammarId && (
+      {(forcedGrammarId || forcedVocabId) && (
         <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
-          <span>已指定文法：{forcedGrammarPoint ?? forcedGrammarId}</span>
+          <span>
+            已指定{forcedGrammarId ? "文法" : "單字"}：
+            {forcedGrammarId
+              ? (forcedGrammarPoint ?? forcedGrammarId)
+              : (forcedVocabWord ?? forcedVocabId)}
+          </span>
           <button
             type="button"
-            onClick={clearForcedGrammar}
-            aria-label="取消指定文法"
+            onClick={clearForcedTarget}
+            aria-label="取消指定"
             className="text-emerald-600 hover:text-emerald-900"
           >
             ✕
@@ -299,11 +324,11 @@ export default function PracticePage() {
                   </div>
                 </div>
               )}
-              {forcedGrammarId && result.model_answer && (
+              {(forcedGrammarId || forcedVocabId) && result.model_answer && (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void addExampleToGrammar()}
+                    onClick={() => void addExampleToLibrary()}
                     disabled={addingExample || exampleAdded}
                     className="rounded-full bg-teal-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                   >
@@ -311,7 +336,7 @@ export default function PracticePage() {
                       ? "已加入例句 ✓"
                       : addingExample
                         ? "加入中…"
-                        : `加入「${forcedGrammarPoint ?? "此文法"}」例句`}
+                        : `加入「${forcedGrammarId ? (forcedGrammarPoint ?? "此文法") : (forcedVocabWord ?? "此單字")}」例句`}
                   </button>
                   {addExampleError && (
                     <span className="text-xs text-red-600">{addExampleError}</span>

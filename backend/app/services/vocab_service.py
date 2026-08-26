@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
-from app.models.schemas.common import JlptLevel
+from app.models.schemas.common import ExampleSentence, JlptLevel
 from app.models.schemas.vocab import (
     ReviewScoreOut,
     VocabularyDefinitionOut,
@@ -254,6 +254,34 @@ class VocabService:
                 }
             ).execute()
 
+        return self._load_vocab_out(vocabulary_id)
+
+    def add_example_from_practice(
+        self, vocabulary_id: UUID, *, japanese: str, chinese: str | None
+    ) -> VocabularyOut:
+        """Append an AI-graded practice translation onto the primary definition."""
+        current = self.get_vocab(vocabulary_id)  # 404 if missing/archived
+        if not current.definitions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="此單字尚無釋義，無法加入例句。",
+            )
+        primary = current.definitions[0]
+        examples = [*primary.example_sentences, ExampleSentence(japanese=japanese, chinese=chinese)]
+        self.db.table("vocabulary_definitions").update(
+            {
+                "example_sentences": [
+                    {
+                        "japanese": ex.japanese,
+                        "reading": ex.reading,
+                        "chinese": ex.chinese,
+                        "english": ex.english,
+                        "highlight": ex.highlight,
+                    }
+                    for ex in examples
+                ]
+            }
+        ).eq("id", str(primary.id)).execute()
         return self._load_vocab_out(vocabulary_id)
 
     # ── Review batch ────────────────────────────────────────────────────────
