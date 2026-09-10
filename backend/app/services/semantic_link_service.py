@@ -506,20 +506,24 @@ class SemanticLinkService:
         entity_id: UUID,
         vector: list[float],
     ) -> list[dict]:
-        try:
-            result = self.db.rpc(
-                "match_content_embeddings",
-                {
-                    "query_embedding": vector,
-                    "match_entity_type": entity_type.value,
-                    "match_count": settings.EMBEDDING_MATCH_TOP_K,
-                    "exclude_id": str(entity_id),
-                },
-            ).execute()
-            return result.data or []
-        except Exception:
-            logger.exception("match_content_embeddings RPC failed; falling back")
-            return self._match_neighbors_fallback(entity_type, entity_id, vector)
+        # ANN path (pgvector HNSW index via the match_content_embeddings RPC) —
+        # disabled in favor of brute-force below; corpus is small enough that
+        # exact search costs nothing noticeable. See _match_neighbors_fallback.
+        # try:
+        #     result = self.db.rpc(
+        #         "match_content_embeddings",
+        #         {
+        #             "query_embedding": vector,
+        #             "match_entity_type": entity_type.value,
+        #             "match_count": settings.EMBEDDING_MATCH_TOP_K,
+        #             "exclude_id": str(entity_id),
+        #         },
+        #     ).execute()
+        #     return result.data or []
+        # except Exception:
+        #     logger.exception("match_content_embeddings RPC failed; falling back")
+        #     return self._match_neighbors_fallback(entity_type, entity_id, vector)
+        return self._match_neighbors_fallback(entity_type, entity_id, vector)
 
     def _match_neighbors_fallback(
         self,
@@ -527,7 +531,8 @@ class SemanticLinkService:
         entity_id: UUID,
         vector: list[float],
     ) -> list[dict]:
-        """Python cosine fallback if RPC unavailable (slower, for small corpora).
+        """Brute-force cosine search (no ANN index): scans every embedding of
+        this entity_type and scores it against the query vector in Python.
 
         Dedupes to the best-scoring row per entity_id, matching the RPC's
         behavior now that an entity can have multiple sense rows.
@@ -537,7 +542,7 @@ class SemanticLinkService:
             .select("entity_id, embedding")
             .eq("entity_type", entity_type.value)
             .neq("entity_id", str(entity_id))
-            .limit(2000)
+            .limit(20000)
             .execute()
         ).data or []
 
