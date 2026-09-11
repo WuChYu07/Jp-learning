@@ -8,7 +8,9 @@ from pydantic import BaseModel
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
+from app.services.grammar_service import grammar_service
 from app.services.review_activity_service import review_activity_service
+from app.services.vocab_service import vocab_service
 
 _JLPT_ORDER = ["N5", "N4", "N3", "N2", "N1", "unknown"]
 
@@ -67,49 +69,25 @@ class DashboardService:
         exam_grammar_count = 0
 
         if user_id:
-            now_iso = datetime.now(UTC).isoformat()
-            due = (
-                self.db.table("user_vocab_progress")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .lte("next_review_date", now_iso)
-                .limit(1)
-                .execute()
-            )
-            vocab_due = due.count or 0
+            # Same due/new pool definitions as the actual review queue (review_queue.py),
+            # so this count doesn't drift from what a review session will actually offer.
+            vocab_pools = vocab_service.get_review_pool_counts(user_id)
+            grammar_pools = grammar_service.get_review_pool_counts(user_id)
+            vocab_due = vocab_pools["due"] + max(0, min(vocab_pools["new"], 10))
+            grammar_due = grammar_pools["due"] + max(0, min(grammar_pools["new"], 10))
 
             progress = (
                 self.db.table("user_vocab_progress")
-                .select("vocabulary_id, review_score")
+                .select("review_score")
                 .eq("user_id", user_id)
                 .execute()
             )
             rows = progress.data or []
-            seen = len(rows)
-            vocab_due += max(0, min(vocab_total - seen, 10))
             if rows:
                 review_score_avg = round(
                     sum(float(r.get("review_score") or 0) for r in rows) / len(rows),
                     1,
                 )
-
-            g_due = (
-                self.db.table("user_grammar_progress")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .lte("next_review_date", now_iso)
-                .limit(1)
-                .execute()
-            )
-            grammar_due = g_due.count or 0
-            g_progress = (
-                self.db.table("user_grammar_progress")
-                .select("grammar_id")
-                .eq("user_id", user_id)
-                .execute()
-            )
-            g_seen = len(g_progress.data or [])
-            grammar_due += max(0, min(grammar_total - g_seen, 10))
 
             profile = (
                 self.db.table("users")

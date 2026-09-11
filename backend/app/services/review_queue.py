@@ -71,6 +71,19 @@ def overdue_weighted_order(
     return ordered
 
 
+def pool_sizes(
+    due_ids: list[str],
+    new_ids: list[str],
+    score_by_id: dict[str, float],
+    cooldown_ids: set[str] | None = None,
+) -> dict[str, int]:
+    """Count-only mirror of build_mixed_review_queue's pool membership rules,
+    for display (e.g. a dashboard widget) without building the full queue."""
+    excluded = set(due_ids) | (cooldown_ids or set())
+    early_count = sum(1 for vid in score_by_id if vid not in excluded)
+    return {"due": len(due_ids), "new": len(new_ids), "early": early_count}
+
+
 def build_mixed_review_queue(
     *,
     due_ids: list[str],

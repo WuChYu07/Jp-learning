@@ -412,6 +412,48 @@ class VocabService:
             total=total_vocab,
         )
 
+    def get_review_pool_counts(self, user_id: str) -> dict[str, int]:
+        """Sizes of the due / new / low-score-early pools, as used by _due_reviews_authenticated."""
+        from app.services.review_queue import pool_sizes
+
+        now_iso = datetime.now(UTC).isoformat()
+        cooldown_since_iso = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+
+        due_rows = (
+            self.db.table("user_vocab_progress")
+            .select("vocabulary_id")
+            .eq("user_id", user_id)
+            .lte("next_review_date", now_iso)
+            .execute()
+        ).data or []
+        due_ids = [r["vocabulary_id"] for r in due_rows]
+
+        all_progress = (
+            self.db.table("user_vocab_progress")
+            .select("vocabulary_id, review_score, updated_at")
+            .eq("user_id", user_id)
+            .execute()
+        ).data or []
+        seen_ids = {r["vocabulary_id"] for r in all_progress}
+        score_map = {
+            r["vocabulary_id"]: float(r.get("review_score") or 0) for r in all_progress
+        }
+        cooldown_ids = {
+            r["vocabulary_id"]
+            for r in all_progress
+            if (r.get("updated_at") or "") >= cooldown_since_iso
+        }
+
+        unseen_rows = (
+            self.db.table("vocabularies")
+            .select("id")
+            .neq("sync_status", "archived")
+            .execute()
+        ).data or []
+        new_ids = [r["id"] for r in unseen_rows if r["id"] not in seen_ids]
+
+        return pool_sizes(due_ids, new_ids, score_map, cooldown_ids)
+
     # ── Submit review ───────────────────────────────────────────────────────
 
     def submit_review(self, user_id: str | None, vocabulary_id: UUID, rating: str) -> dict:

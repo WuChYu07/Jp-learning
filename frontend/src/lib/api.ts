@@ -482,6 +482,17 @@ export type DashboardTrends = {
   grammar_jlpt: JlptMastery[];
 };
 
+export type ReviewPoolCounts = {
+  due: number;
+  new: number;
+  early: number;
+};
+
+export type ReviewPools = {
+  vocab: ReviewPoolCounts;
+  grammar: ReviewPoolCounts;
+};
+
 export type GrammarReviewBatchResponse = {
   items: Grammar[];
   has_more: boolean;
@@ -616,6 +627,7 @@ export const api = {
   dashboardStats: () => request<DashboardStats>("/api/v1/dashboard/stats"),
   dashboardTrends: (days = 14) =>
     request<DashboardTrends>(`/api/v1/dashboard/trends?days=${days}`),
+  reviewPools: () => request<ReviewPools>("/api/v1/dashboard/review-pools"),
   listVocab: (params?: { jlpt?: string; q?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.jlpt) q.set("jlpt", params.jlpt);

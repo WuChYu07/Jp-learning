@@ -6,6 +6,8 @@ import {
   DashboardStats,
   DashboardTrends,
   JlptMastery,
+  ReviewPoolCounts,
+  ReviewPools,
   formatUserFacingError,
 } from "../lib/api";
 import { useSlowLoadHint } from "../lib/backendStatus";
@@ -13,6 +15,7 @@ import { useSlowLoadHint } from "../lib/backendStatus";
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [trends, setTrends] = useState<DashboardTrends | null>(null);
+  const [pools, setPools] = useState<ReviewPools | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const loadHint = useSlowLoadHint(loading);
@@ -28,6 +31,10 @@ export default function DashboardPage() {
       .dashboardTrends(14)
       .then(setTrends)
       .catch(() => setTrends(null));
+    api
+      .reviewPools()
+      .then(setPools)
+      .catch(() => setPools(null));
   }, []);
 
   return (
@@ -96,6 +103,20 @@ export default function DashboardPage() {
             value={Math.round(stats.review_score_avg)}
             accent="text-emerald-600"
           />
+        </section>
+      )}
+
+      {/* Review pool breakdown */}
+      {pools && (
+        <section className="rounded-2xl bg-white p-6 ring-1 ring-orange-100">
+          <p className="text-sm font-medium text-stone-700">複習卡池分布</p>
+          <p className="mt-0.5 text-xs text-stone-400">
+            到期：已到複習時間 · 新卡：從未複習過 · 待加強：分數偏低、提前插入的卡
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <PoolBreakdown title="單字" pool={pools.vocab} />
+            <PoolBreakdown title="文法" pool={pools.grammar} />
+          </div>
         </section>
       )}
 
@@ -306,6 +327,47 @@ function JlptBreakdownList({ items, accent }: { items: JlptMastery[]; accent: st
         </li>
       ))}
     </ul>
+  );
+}
+
+function PoolBreakdown({ title, pool }: { title: string; pool: ReviewPoolCounts }) {
+  const total = pool.due + pool.new + pool.early;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  return (
+    <div className="rounded-xl bg-orange-50/60 p-4 ring-1 ring-orange-100">
+      <p className="text-sm font-semibold text-stone-700">{title}</p>
+      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-stone-100">
+        <div
+          className="h-full bg-[var(--color-primary)]"
+          style={{ width: `${pct(pool.due)}%` }}
+          title={`到期 ${pool.due}`}
+        />
+        <div
+          className="h-full bg-sky-500"
+          style={{ width: `${pct(pool.new)}%` }}
+          title={`新卡 ${pool.new}`}
+        />
+        <div
+          className="h-full bg-amber-400"
+          style={{ width: `${pct(pool.early)}%` }}
+          title={`待加強 ${pool.early}`}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <p className="text-lg font-bold text-[var(--color-primary)]">{pool.due}</p>
+          <p className="text-[11px] text-stone-500">到期</p>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-sky-600">{pool.new}</p>
+          <p className="text-[11px] text-stone-500">新卡</p>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-amber-600">{pool.early}</p>
+          <p className="text-[11px] text-stone-500">待加強</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
